@@ -1,4 +1,4 @@
-country+AF8-code,country+AF8-name,year,percentage+AF8-education+AF8-on+AF8-gdp
+country,country+AF8-name,year,percentage+AF8-education+AF8-on+AF8-gdp
 ARG,Argentina,1970,1.4580899477005
 AUT,Austria,1970,4.14716005325317
 BHR,Bahrain,1970,2.01217007637024
