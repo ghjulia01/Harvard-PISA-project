@@ -1,4 +1,4 @@
-country,country+AF8-name,ilo+AF8-region,ilo+AF8-subregion,ilo+AF8-subregion+AF8-detail,world+AF8-bank+AF8-income+AF8-group,ilo+AF8-member
+country+AF8-code,country+AF8-name,ilo+AF8-region,ilo+AF8-subregion,ilo+AF8-subregion+AF8-detail,world+AF8-bank+AF8-income+AF8-group,ilo+AF8-member
 AFG,Afghanistan,Asia and the Pacific,Southern Asia,Southern Asia,Low income,Yes
 ALB,Albania,Europe and Central Asia,+ACI-Northern, Southern and Western Europe+ACI-,Southern Europe,Upper+AC0-middle income,Yes
 DZA,Algeria,Africa,Northern Africa,Northern Africa,Lower+AC0-middle income,Yes

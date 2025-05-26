@@ -1,4 +1,4 @@
-country,country+AF8-name,school+AF8-level,year,gender+AF8-parity+AF8-index
+country+AF8-code,country+AF8-name,school+AF8-level,year,gender+AF8-parity+AF8-index
 WSM,Samoa,Tertiary,1970,0.0102000003680587
 TCD,Chad,Tertiary,1973,0.0250499993562698
 BTN,Bhutan,Secondary,1970,0.03558000177145
