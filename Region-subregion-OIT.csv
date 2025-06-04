@@ -23,12 +23,12 @@ BLZ,Belize,Americas,Latin America and the Caribbean,Central America,Upper-middle
 BEN,Benin,Africa,Sub-Saharan Africa,Western Africa,Lower-middle income,Yes
 BMU,Bermuda,Americas,Northern America,Northern America,High income,No
 BTN,Bhutan,Asia and the Pacific,Southern Asia,Southern Asia,Lower-middle income,No
-BOL,Bolivia (Plurinational State of),Americas,Latin America and the Caribbean,South America,Lower-middle income,Yes
+BOL,Bolivia,Americas,Latin America and the Caribbean,South America,Lower-middle income,Yes
 BIH,Bosnia and Herzegovina,Europe and Central Asia,"Northern, Southern and Western Europe",Southern Europe,Upper-middle income,Yes
 BWA,Botswana,Africa,Sub-Saharan Africa,Southern Africa,Upper-middle income,Yes
 BRA,Brazil,Americas,Latin America and the Caribbean,South America,Upper-middle income,Yes
 VGB,British Virgin Islands,Americas,Latin America and the Caribbean,Caribbean,High income,No
-BRN,Brunei Darussalam,Asia and the Pacific,South-Eastern Asia and the Pacific,South-Eastern Asia,High income,No
+BRN,Brunei,Asia and the Pacific,South-Eastern Asia and the Pacific,South-Eastern Asia,High income,No
 BGR,Bulgaria,Europe and Central Asia,Eastern Europe,Eastern Europe,Upper-middle income,Yes
 BFA,Burkina Faso,Africa,Sub-Saharan Africa,Western Africa,Low income,Yes
 BDI,Burundi,Africa,Sub-Saharan Africa,Eastern Africa,Low income,Yes
@@ -96,7 +96,7 @@ HUN,Hungary,Europe and Central Asia,Eastern Europe,Eastern Europe,High income,Ye
 ISL,Iceland,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,Yes
 IND,India,Asia and the Pacific,Southern Asia,Southern Asia,Lower-middle income,Yes
 IDN,Indonesia,Asia and the Pacific,South-Eastern Asia and the Pacific,South-Eastern Asia,Lower-middle income,Yes
-IRN,Iran (Islamic Republic of),Asia and the Pacific,Southern Asia,Southern Asia,Lower-middle income,Yes
+IRN,Iran,Asia and the Pacific,Southern Asia,Southern Asia,Lower-middle income,Yes
 IRQ,Iraq,Arab States,Arab States,Arab States,Upper-middle income,Yes
 IRL,Ireland,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,Yes
 IMN,Isle of Man,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,No
@@ -134,7 +134,7 @@ MTQ,Martinique,Americas,Latin America and the Caribbean,Caribbean,High income,No
 MRT,Mauritania,Africa,Sub-Saharan Africa,Western Africa,Lower-middle income,Yes
 MUS,Mauritius,Africa,Sub-Saharan Africa,Eastern Africa,Upper-middle income,Yes
 MEX,Mexico,Americas,Latin America and the Caribbean,Central America,Upper-middle income,Yes
-FSM,Micronesia (Federated States of),Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Lower-middle income,No
+FSM,Micronesia,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Lower-middle income,No
 MCO,Monaco,Europe and Central Asia,"Northern, Southern and Western Europe",Western Europe,High income,No
 MNG,Mongolia,Asia and the Pacific,Eastern Asia,Eastern Asia,Lower-middle income,Yes
 MNE,Montenegro,Europe and Central Asia,"Northern, Southern and Western Europe",Southern Europe,Upper-middle income,Yes
@@ -157,7 +157,7 @@ NFK,Norfolk Island,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacif
 MKD,North Macedonia,Europe and Central Asia,"Northern, Southern and Western Europe",Southern Europe,Upper-middle income,Yes
 MNP,Northern Mariana Islands,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,High income,No
 NOR,Norway,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,Yes
-PSE,Occupied Palestinian Territory,Arab States,Arab States,Arab States,Lower-middle income,No
+PSE,Palestine,Arab States,Arab States,Arab States,Lower-middle income,No
 OMN,Oman,Arab States,Arab States,Arab States,High income,Yes
 PAK,Pakistan,Asia and the Pacific,Southern Asia,Southern Asia,Lower-middle income,Yes
 PLW,Palau,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Upper-middle income,No
@@ -213,20 +213,20 @@ TKL,Tokelau,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Isla
 TON,Tonga,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Upper-middle income,No
 TTO,Trinidad and Tobago,Americas,Latin America and the Caribbean,Caribbean,High income,Yes
 TUN,Tunisia,Africa,Northern Africa,Northern Africa,Lower-middle income,Yes
-TUR,?les Turks et Caicos,Europe and Central Asia,Central and Western Asia,Western Asia,Upper-middle income,Yes
+TUR,les Turks et Caicos,Europe and Central Asia,Central and Western Asia,Western Asia,Upper-middle income,Yes
 TKM,Turkmenistan,Europe and Central Asia,Central and Western Asia,Central Asia,Upper-middle income,Yes
 TCA,Turks and Caicos Islands,Americas,Latin America and the Caribbean,Caribbean,High income,No
 TUV,Tuvalu,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Upper-middle income,No
 UGA,Uganda,Africa,Sub-Saharan Africa,Eastern Africa,Low income,Yes
 UKR,Ukraine,Europe and Central Asia,Eastern Europe,Eastern Europe,Lower-middle income,Yes
 ARE,United Arab Emirates,Arab States,Arab States,Arab States,High income,Yes
-GBR,United Kingdom of Great Britain and Northern Ireland,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,Yes
+GBR,United Kingdom,Europe and Central Asia,"Northern, Southern and Western Europe",Northern Europe,High income,Yes
 USA,United States of America,Americas,Northern America,Northern America,High income,Yes
 VIR,United States Virgin Islands,Americas,Latin America and the Caribbean,Caribbean,High income,No
 URY,Uruguay,Americas,Latin America and the Caribbean,South America,High income,Yes
 UZB,Uzbekistan,Europe and Central Asia,Central and Western Asia,Central Asia,Lower-middle income,Yes
 VUT,Vanuatu,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,Lower-middle income,No
-VEN,Venezuela (Bolivarian Republic of),Americas,Latin America and the Caribbean,South America,Upper-middle income,Yes
+VEN,Venezuela,Americas,Latin America and the Caribbean,South America,Upper-middle income,Yes
 VNM,Viet Nam,Asia and the Pacific,South-Eastern Asia and the Pacific,South-Eastern Asia,Lower-middle income,Yes
 WLF,Wallis and Futuna,Asia and the Pacific,South-Eastern Asia and the Pacific,Pacific Islands,High income,No
 ESH,Western Sahara,Africa,Northern Africa,Northern Africa,Lower-middle income,No
