@@ -1,0 +1,6619 @@
+#' ---
+#' title: "HarvardX - PH125.9x Data Science: Capstone"
+#' subtitle: "PISA Project"
+#' author: "Julie COLLEONI"
+#' date: "2025-06-05"
+#' output:
+#'   pdf_document:
+#'     latex_engine: xelatex
+#'     toc: true                 
+#'     toc_depth: 3             
+#'     number_sections: true     
+#'     includes:
+#' geometry: margin=2.5cm       
+#' always_allow_html: true
+#' editor_options: 
+#'   markdown: 
+#'     wrap: 72
+#' ---
+#' 
+#' # Introduction
+#' 
+#' This report documents a predictive modeling project conducted as part of
+#' the HarvardX Professional Certificate in Data Science.
+#' 
+#' Education is widely recognized as a key driver of social and economic
+#' development. The Programme for International Student Assessment (PISA),
+#' led by the OECD, evaluates educational systems worldwide by testing the
+#' skills and knowledge of 15-year-old students. Differences in school
+#' performance, both within and between countries, reflect not only
+#' national education policies, but also local context, resources, and
+#' individual backgrounds.
+#' 
+#' This project addresses the predicability of academic performance:
+#' 
+#' -   **Student-level success probability:** Can the likelihood of an
+#'     individual student achieving a high score be estimated, based on
+#'     national trends, the context of their school, family background, and
+#'     personal characteristics?
+#' 
+#' The LearningTower dataset, which combines school, student, and
+#' contextual data across multiple countries, provides an opportunity to
+#' investigate these questions.
+#' 
+#' In addition to the core PISA LearningTower datasets, several auxiliary
+#' databases are integrated to enrich the contextual and explanatory power
+#' of the analysis. These include:
+#' 
+#' -   a gender-specific school enrollment index derived from UNESCO data,
+#' 
+#' -   UNESCO-based government expenditure on education as a percentage of
+#'     total government spending, and
+#' 
+#' -   GDP per capita (PPP) from the OECD and Eurostat databases
+#' 
+#' -   a country grouping classification based on ILO regions and World
+#'     Bank income levels.
+#' 
+#' By merging these sources, the project enables multilevel analysis of
+#' educational performance, accounting for gender parity, resource
+#' allocation, regional context, and national socioeconomic status.
+#' 
+#' The objectives of the present analysis are as follows:
+#' 
+#' 1\. To estimate, for each student, the probability of “success”, by
+#' incorporating information about the student’s school, family
+#' environment, and individual profile.
+#' 
+#' 2\. To identify and interpret the key drivers of student success, and to
+#' suggest targeted policy recommendations.
+#' 
+#' The methodology combines data preparation, exploratory visualization,
+#' and predictive modeling, with a particular emphasis on interpretability.
+#' Special attention is given to disentangling the respective roles of
+#' country, school, family, and individual factors in educational outcomes,
+#' and to quantifying the relative importance of these factors using
+#' machine learning techniques.
+#' 
+#' By leveraging these analytical approaches, the project aims to deliver
+#' both accurate predictive tools and actionable insights for educators and
+#' policymakers.
+#' 
+#' ## Dataset Overview
+#' 
+#' The LearningTower dataset compiles detailed information on schools and
+#' students across multiple countries, primarily based on data from the
+#' OECD PISA studies. This dataset offers a rich set of variables,
+#' including academic results, school resources, student demographics, and
+#' various contextual indicators. For this project, the most recent
+#' publicly available data will be used. The dataset can be directly
+#' downloaded from the LearningTower GitHub repository.
+#' 
+## ----PISA-dataset-overview-1-download-data, message=FALSE, warning=FALSE------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Load necessary packages
+if (!require(tidyverse)) install.packages("tidyverse", repos = "https://cloud.r-project.org/")
+
+if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+
+if (!require(janitor)) install.packages("janitor", repos = "https://cloud.r-project.org/")
+
+if (!require(DataExplorer)) install.packages("DataExplorer", repos = "https://cloud.r-project.org/")
+
+if (!require(corrplot)) install.packages("corrplot", repos = "https://cloud.r-project.org/")
+
+# For the PISA dataset
+if (!require(learningtower)) install.packages("learningtower", repos = "https://cloud.r-project.org/")
+
+if (!require(xgboost)) install.packages("xgboost", repos = "https://cloud.r-project.org/")
+
+if (!require(Matrix)) install.packages("Matrix", repos = "https://cloud.r-project.org/")
+
+if (!require(ranger)) install.packages("ranger", repos = "https://cloud.r-project.org/")
+
+
+library(learningtower)
+library(dplyr)
+library(tidyverse)
+library(caret)
+library(tidyr)
+library(ggplot2)
+library(kableExtra)
+library(janitor)
+library(DataExplorer)   
+library(corrplot)
+library(ggrepel)
+library(scales)
+library(stringr)
+library(xgboost)
+library(Matrix)
+library(ranger)
+
+#load the entire student data
+student <- load_student("all")
+
+# loading the school data
+data(school)
+
+# loading the countrycode data
+data(countrycode)
+head(countrycode)
+
+
+student_summary <- student |>
+  group_by(year) |>
+  tally(name = "Number of Students")
+
+school_summary <- school |>
+  group_by(year) |>
+  tally(name = "Number of Schools")
+
+combined_summary <- full_join(student_summary, school_summary, by = "year")
+
+knitr::kable(combined_summary)
+
+
+#' 
+## ----PISA-dataset-additional-database, message=FALSE, warning=FALSE-----------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+
+# URLs to the raw CSV files in my GitHub repo
+url_gender <- "https://raw.githubusercontent.com/ghjulia01/Harvard-PISA-project/main/UNESCO_School_gender_enrollment_index.csv"
+url_expenditure <- "https://raw.githubusercontent.com/ghjulia01/Harvard-PISA-project/main/UNESCO-Government-expenditure-on-education.csv"
+url_region <- "https://raw.githubusercontent.com/ghjulia01/Harvard-PISA-project/main/Region-subregion-OIT.csv"
+url_gdpperppp <- "https://raw.githubusercontent.com/ghjulia01/Harvard-PISA-project/main/2022_GDP_per_Capita_PPP_in_constant_2021_international_dollar.csv"
+
+# Read the datasets 
+
+gender_index <- read_csv(url(url_gender))
+expenditure <- read_csv(url(url_expenditure))
+region_income <- read_csv(url(url_region))
+gdp_perppp <- read_csv(url(url_gdpperppp))
+
+# Check the column names
+colnames(gender_index)
+colnames(expenditure)
+colnames(region_income)
+colnames(gdp_perppp)
+
+
+#' 
+#' ## Unique school ID creation
+#' 
+#' To prevent data leakage and to ensure a fair evaluation, the test set
+#' was constructed in such a way that all key identifiers present in the
+#' test set (for instance, school IDs for the school dataset or school IDs
+#' within the student dataset) are also present in the training set. Any
+#' observations in the test set referencing identifiers not found in the
+#' training set were returned to the training set.
+#' 
+#' For any analyses or predictions at the school level, the corresponding
+#' schools can be filtered directly from the main school dataset based on
+#' the unique school identifiers present in the student test set. This
+#' approach guarantees consistency across student- and school-level
+#' analyses and avoids potential issues related to unseen entities.
+#' 
+## ----PISA-data-set-unique-school-id, message=FALSE, warning=FALSE-------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Remove leading zeros in school_id for SCHOOL
+school <- school %>%
+  mutate(school_id = as.character(as.integer(school_id)))
+
+# SCHOOL dataset
+school <- school %>%
+  mutate(school_id = as.character(as.integer(school_id)),
+         school_uid = paste(country, year, school_id, sep = "_"))
+
+# STUDENT dataset
+student <- student %>%
+  mutate(school_id = as.character(as.integer(school_id)),
+         school_uid = paste(country, year, school_id, sep = "_"))
+
+#' 
+#' # Methods and Data Analysis
+#' 
+#' ## Data Preparation
+#' 
+#' ### Database explanation
+#' 
+#' **Explanation for Sampling Weights (stu_wgt) in PISA**
+#' 
+#' Analyses In PISA datasets, not all sampled students are equally
+#' representative of the national student population. To account for
+#' differences in selection probability, sampling weights must be used in
+#' all analyses. For instance, if students from small schools are
+#' intentionally oversampled in a given country, unweighted statistics
+#' would disproportionately reflect the characteristics of those students,
+#' leading to biased results. The use of sampling weights corrects for such
+#' over- or under-representation, ensuring unbiased and
+#' population-representative estimates.
+#' 
+#' The final student weight, stored in the variable stu_wgt in the
+#' international PISA files, reflects each student’s probability of
+#' selection and relevant adjustments. The sum of these weights estimates
+#' the total number of 15-year-old students enrolled in school in the
+#' target country. As a result, countries with larger populations will
+#' naturally contribute more to the aggregated results than smaller
+#' countries.
+#' 
+#' It is essential to incorporate the stu_wgt variable in all analyses,
+#' including any calculations, summaries, and modeling, to accurately
+#' reflect the survey design and avoid biased conclusions. For example,
+#' when calculating means or regression coefficients, weighted methods
+#' should be used so that each student's contribution is proportional to
+#' their sampling weight.
+#' 
+#' *Note:*
+#' 
+#' *Using student weights designed for one subject (e.g., reading) to
+#' analyze results for another subject (e.g., mathematics or science) can
+#' introduce bias, especially due to oversampling of students in special
+#' education. In such cases, correction factors must be applied to avoid
+#' under- or overestimation, as detailed in the PISA technical
+#' documentation.*
+#' 
+#' In summary, the stu_wgt variable is critical for producing valid and
+#' representative results and must always be considered in all analyses
+#' using PISA data.
+#' 
+#' **Explanation of the ESCS Index (Economic, Social and Cultural Status
+#' Index) in PISA**
+#' 
+#' The ESCS index, developed for the PISA assessment, is a **composite
+#' measure that summarizes multiple facets of a student’s social, economic,
+#' and cultural background**. It was designed to facilitate cross-country
+#' comparisons of equity in educational outcomes.
+#' 
+#' **Structure:**\
+#' The ESCS index is constructed using **three main components**:
+#' 
+#' 1.  **ISEI – Parental Occupational Status:**\
+#'     The highest International Socio-Economic Index of Occupational
+#'     Status among the student’s parents, based on the type of occupation
+#'     (using ISCO/CITP classification).
+#' 
+#' 2.  **PARED – Parental Education:**\
+#'     The highest educational attainment of the parents, measured in years
+#'     of schooling and codified using the International Standard
+#'     Classification of Education (ISCED/CITE).
+#' 
+#' 3.  **HOMEPOS – Home Possessions:**\
+#'     An index summarizing the student’s access to resources at home,
+#'     itself built from several sub-components:
+#' 
+#'     -   **WEALTH:** Material possessions such as a private room,
+#'         internet connection, dishwasher, DVD player, number of
+#'         telephones, televisions, computers, and cars.
+#' 
+#'     -   **HEDRES:** Educational resources, including a desk/table for
+#'         study, a quiet place to work, a computer for schoolwork,
+#'         educational software, technical books, and a dictionary.
+#' 
+#'     -   **CULTPOSS:** Cultural possessions, such as classical
+#'         literature, poetry collections, and works of art.
+#' 
+#'     -   **Number of books at home:** As a separate indicator.
+#' 
+#' **Calculation method:**\
+#' All these components are **combined through a factor analysis**,
+#' resulting in a single, standardized ESCS score for each student. The
+#' relative weights of each component are determined internationally and
+#' then applied to all students, regardless of country.
+#' 
+#' **Purpose and interpretation:**
+#' 
+#' -   The ESCS is widely used as a benchmark for analyzing equity and the
+#'     impact of socio-economic background on student performance.
+#' 
+#' -   It provides a **unidimensional summary** of socio-economic and
+#'     cultural status, facilitating comparisons across countries and time.
+#' 
+#' -   However, the aggregation of diverse indicators means that nuances in
+#'     the individual contributions of each component may be lost. The
+#'     importance of each factor can vary significantly between countries
+#'     and educational systems.
+#' 
+#' **Limitations:**
+#' 
+#' -   The ESCS relies on student-reported data, which can be subject to
+#'     reporting errors or non-response (especially for parental education
+#'     or occupation).
+#' 
+#' -   Some items may have different social significance or predictive
+#'     power across countries. For example, owning a dishwasher may
+#'     correlate positively with achievement in some countries, but not in
+#'     others.
+#' 
+#' **In summary:**
+#' 
+#' > The ESCS index provides a standardized measure of students’ economic,
+#' > social, and cultural background in PISA, integrating parental
+#' > occupation and education, as well as material, educational, and
+#' > cultural resources at home. It is a powerful tool for analyzing
+#' > educational equity but should be interpreted with an understanding of
+#' > its components and limitations.
+#' 
+## ----PISA-datatrain-glimpse, message=FALSE, warning=FALSE---------------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# For the school dataset
+glimpse(student)
+glimpse(school)
+
+
+#' 
+#' ### Data cleaning
+#' 
+#' **Key Structure and Uniqueness Verification**
+#' 
+#' Before any analysis, it is important to ensure that all key identifiers
+#' are unique where required, and that no missing keys exist. This step
+#' guarantees integrity for all subsequent merges and analyses.
+#' 
+## ----PISA-data-cleaning-uniqueness, message=FALSE, warning=FALSE--------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Check uniqueness of school_uid in the school dataset
+sum(duplicated(school$school_uid)) # should return 0
+
+# Check for missing school_uids in the student dataset
+sum(is.na(student$school_uid)) # should return 0
+
+
+#' 
+#' **Assessment and Handling of Missing Data:**
+#' 
+#' Identifying missing data helps to determine whether to impute, remove,
+#' or otherwise handle gaps to avoid introducing bias or losing critical
+#' information.
+#' 
+#' For critical variables (for instance escs, stu_wgt, performance scores),
+#' it is important to consider imputation or filtering.
+#' 
+#' For non-critical variables, it is possible to consider imputation with a
+#' placeholder or removal.
+#' 
+## ----PISA-data-cleaning-assessment, message=FALSE, warning=FALSE--------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# For student_train
+student_na <- sapply(student, function(x) mean(is.na(x))) * 100
+student_na <- round(student_na, 2)
+student_na_df <- data.frame(
+  Variable = names(student_na),
+  Percent_Missing = student_na
+) %>% arrange(desc(Percent_Missing))
+
+knitr::kable(student_na_df, caption = "Percentage of Missing Values (student)")
+
+# For school_train
+school_na <- sapply(school, function(x) mean(is.na(x))) * 100
+school_na <- round(school_na, 2)
+school_na_df <- data.frame(
+  Variable = names(school_na),
+  Percent_Missing = school_na
+) %>% arrange(desc(Percent_Missing))
+
+knitr::kable(school_na_df, caption = "Percentage of Missing Values (school)")
+
+
+#' 
+#' An observation can be made that in the `student_train` dataset there are
+#' several critical variables that need filtering such as: escs, math,
+#' read, science and the gender variables. No critical variables in the
+#' `school_train` dataset need to be filtered.
+#' 
+## ----PISA-data-cleaning-assessment-correction, message=FALSE, warning=FALSE---------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Remove students without an ESCS Index (Economic, Social and Cultural Status)
+student <- student %>% filter(!is.na(escs))
+
+# Remove students without a math score 
+student <- student %>% filter(!is.na(math))
+
+# Remove students without a litteracy score 
+student <- student %>% filter(!is.na(read))
+
+# Remove students without a science score 
+student <- student %>% filter(!is.na(science))
+
+# Remove students without a gender variable 
+student <- student %>% filter(!is.na(gender))
+
+# Verification for student_train
+student_na <- sapply(student, function(x) mean(is.na(x))) * 100
+student_na <- round(student_na, 2)
+student_na_df <- data.frame(
+  Variable = names(student_na),
+  Percent_Missing = student_na
+) %>% arrange(desc(Percent_Missing))
+
+knitr::kable(student_na_df, caption = "Percentage of Missing Values (student)")
+
+
+
+#' 
+#' The lines with the critical missing data have been cleaned.
+#' 
+#' **Variable Type Harmonization:**
+#' 
+#' Ensuring that categorical variables have consistent types and
+#' representations (for instance, converting factors to characters) avoids
+#' errors in modeling and plotting.
+#' 
+## ----PISA-data-cleaning-harmonization, message=FALSE, warning=FALSE-----------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Convert all factors to character type
+student <- student %>%
+  mutate(across(where(is.factor), as.character))
+
+school <- school %>%
+  mutate(across(where(is.factor), as.character))
+
+
+#' 
+#' **Outlier Detection and Filtering:**
+#' 
+#' Detect and handle outliers, especially for test scores, to avoid undue
+#' influence from erroneous or extreme values.
+#' 
+## ----PISA-data-cleaning-outlier-detection, message=FALSE, warning=FALSE-------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Inspect score distributions
+cat("\nMath:\n")
+summary(student$math)
+cat("\nRead:\n")
+summary(student$read)
+cat("\nScience:\n")
+summary(student$science)
+
+
+#' 
+## ----PISA-data-cleaning-outlier-correction, message=FALSE, warning=FALSE------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# Remove extreme values outside plausible PISA range
+student <- student %>%
+  filter(between(math, 50, 1000),
+         between(read, 50, 1000),
+         between(science, 50, 1000))
+
+# Inspect score distributions
+cat("\nMath:\n")
+summary(student$math)
+cat("\nRead:\n")
+summary(student$read)
+cat("\nScience:\n")
+summary(student$science)
+
+
+#' 
+#' **Standardization of Categorical Levels:**
+#' 
+#' Ensuring that all categorical variables (for instance school type) have
+#' standardized values (no typos, capitalization mismatches, or ambiguous
+#' entries).
+#' 
+## ----PISA-data-cleaning-standardization, message=FALSE, warning=FALSE---------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Check unique values for consistency
+table(school$public_private, useNA = "always")
+
+# Check for 'private' when fund_gov > 80
+inconsistent_private <- school %>%
+  filter(fund_gov > 80 & public_private == "private")
+nrow(inconsistent_private) # Should be 0 ideally
+
+# Check for 'public' when fund_gov < 50
+inconsistent_public <- school %>%
+  filter(fund_gov < 50 & public_private == "public")
+nrow(inconsistent_public) # Should be 0 ideally
+
+
+#' 
+#' **Correct the public_private column based on fund_gov:**
+#' 
+#' To improve the classification of school sector, we recoded the
+#' public_private variable based on the percentage of government funding
+#' (fund_gov). Schools for which government funding exceeded 80% were
+#' classified as “public,” while those with less than 50% government
+#' funding were classified as “private.” For schools with government
+#' funding between 50% and 80%, the original public_private label was
+#' retained. This approach allows for a more objective and consistent
+#' distinction between public and private schools in the dataset.
+#' 
+## ----PISA-data-cleaning-standardization-correction, message=FALSE, warning=FALSE----------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+school <- school %>%
+  mutate(
+    public_private = case_when(
+      fund_gov > 80 ~ "public",
+      fund_gov < 50 ~ "private",
+      TRUE ~ public_private
+    )
+  )
+
+# Re-run the table to check new distribution
+table(school$public_private, useNA = "always")
+
+
+#' 
+#' **Average Performance score for each student:**
+#' 
+#' Creation of a new variable; the average performance score for each
+#' student that may enhance predictive power.
+#' 
+## ----PISA-data-cleaning-average-performance, message=FALSE, warning=FALSE-----------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Create an average performance score for each student
+student <- student %>%
+  mutate(avg_score = rowMeans(select(., math, read, science), na.rm = TRUE))
+
+
+#' 
+#' **Incorporation of Sampling Weights:**
+#' 
+#' All analyses (descriptive statistics, modeling, etc.) should incorporate
+#' the stu_wgt sampling weight to produce unbiased,
+#' population-representative results.
+#' 
+## ----PISA-data-cleaning-sampling-weights, message=FALSE, warning=FALSE--------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Weighted mean of average scores
+weighted.mean(student$avg_score, student$stu_wgt, na.rm = TRUE)
+
+
+#' 
+#' **Correct the country code:**
+#' 
+#' The first step is to detect the problematic country codes:
+#' 
+## ----PISA-data-country-code-error, message=FALSE, warning=FALSE---------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+#student %>%
+#  filter(is.na(ilo_subregion)) %>%
+#  count(year)
+
+#student %>%
+#  filter(is.na(ilo_subregion)) %>%
+#  count(country) %>%
+#  arrange(desc(n))
+
+#student %>%
+#  filter(is.na(ilo_subregion)) %>%
+#  select(year, country, avg_score, stu_wgt) %>%
+#  head(20)
+
+
+#' 
+#' In a second step to correct them to the correct country code.
+#' 
+## ----PISA-data-cleaning-country-code-correction, message=FALSE, warning=FALSE-------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Harmonize case before recoding
+student <- student %>% mutate(country = toupper(country))
+school  <- school  %>% mutate(country = toupper(country))
+
+# Always convert to character and capitalize before recoding
+student <- student %>%
+  mutate(
+    country = as.character(country),
+    country = toupper(country)
+  )
+school <- school %>%
+  mutate(
+    country = as.character(country),
+    country = toupper(country)
+  )
+
+country_recode <- c(
+  "TAP" = "TWN",
+  "QES" = "ESP",
+  "KSV" = "KOS",
+  "QAZ" = "AZE",
+  "QCI" = "CHN",
+  "QCN" = "CHN",
+  "QCH" = "CHN",
+  "QRT" = "RUS",
+  "YUG" = "BIH",
+  "QUR" = "UKR",
+  "QTN" = "IND",
+  "QVE" = "VEN",
+  "QMR" = "RUS",
+  "QUE" = "USA",
+  "QRS" = "RUS",
+  "QUC" = "USA",
+  "QAR" = "ARG",
+  "QHP" = "IND",
+  "QUD" = "PRI",
+  "ROM" = "ROU"
+)
+
+# For the student dataset
+student <- student %>%
+  mutate(country = recode(country, !!!country_recode))
+
+# For the school dataset
+school <- school %>%
+  mutate(country = recode(country, !!!country_recode))
+
+# Check the remaining codes
+print("Remaining country codes in student :")
+print(sort(unique(student$country)))
+print("Remaining country codes in school :")
+print(sort(unique(school$country)))
+
+
+# Codes present in the datasets but absent from the recoding
+setdiff(unique(student$country), country_recode)
+setdiff(unique(school$country), country_recode)
+
+
+#' 
+#' recode(country, !!!country_recode) will replace each value in the
+#' country column according to the mapping above.
+#' 
+#' If a code is not in the vector, it remains unchanged.
+#' 
+## ----PISA-data-cleaning-joining-region-income-and-student, message=FALSE, warning=FALSE---------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Join the region_income and student database
+
+student <- student %>%
+  left_join(region_income %>% select(country, ilo_subregion, country_name, world_bank_income_group), by = "country")%>%
+  clean_names()
+
+# Join the region_income and school database
+school <- school %>%
+  left_join(region_income %>% select(country, ilo_subregion, country_name, world_bank_income_group), by = "country")%>%
+  clean_names()
+
+# Verify the regions are correct (if blank all the changes were made)
+student %>%
+  filter(is.na(ilo_subregion)) %>%
+  count(country) %>%
+  arrange(desc(n))
+
+
+
+#' 
+#' **Distribution of the average PISA score :**
+#' 
+## ----PISA-data-cleaning-eda-average-score-student, message=FALSE, warning=FALSE-----------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Plot the distribution of the PISA scores
+ggplot(student, aes(x = avg_score)) +
+  geom_histogram(bins = 30, fill = "#a4c6f2", color = "white", width = 0.8) +
+  theme_minimal() +
+  ggtitle("Distribution of the average score\n  of math, read and science in PISA\n the students are expressed in millions") +
+  scale_y_continuous(
+    labels = label_number(scale = 1e-6, accuracy = 0.1, suffix = "M")
+  )
+
+
+#' 
+#' The histogram displays the distribution of the average PISA scores
+#' (math, reading, and science) for all students in the dataset, with the
+#' number of students expressed in millions. The distribution appears to be
+#' approximately normal (bell-shaped), centered around a mean score of
+#' roughly 450–500 points. Most students scored between 350 and 650, with
+#' very few students achieving extremely low or extremely high average
+#' scores.
+#' 
+#' This suggests that the majority of students cluster around the
+#' international average, while only a small minority achieve very high or
+#' very low scores. The symmetry of the distribution indicates that there
+#' is no significant skewness towards higher or lower performance. This is
+#' consistent with what would be expected from large-scale educational
+#' assessments such as PISA.
+#' 
+## ----PISA-data-cleaning-eda-gender-student, message=FALSE, warning=FALSE------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Plot the gender distribution
+
+ggplot(student, aes(x = gender)) + geom_bar(fill = "#a4c6f2") + theme_minimal() + ggtitle("Gender distribution")
+
+
+#' 
+#' There is approximately the same number of female and male which is
+#' positive for the robustness of the following studies.
+#' 
+#' **Distribution of the students participating for each countries :**
+#' 
+## ----PISA-data-cleaning-students-participation, fig.height=16, fig.width=10,message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# Plot the student participation distribution
+
+students_by_country <- student %>%
+  group_by(country_name) %>%
+  summarise(n_students = n_distinct(student_id)) %>%
+  arrange(desc(n_students))
+
+ggplot(students_by_country, aes(x = reorder(country_name, n_students), y = n_students)) +
+  geom_bar(stat = "identity", fill = "#a4c6f2", color = "white", width = 0.8) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Number of students who participated in PISA by country",
+    x = "Country",
+    y = "Number of students"
+  ) +
+  scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 0.1, suffix = "K")) +
+  coord_flip() +  # Affiche horizontalement
+  theme(
+    axis.text.y = element_text(size = 7) # Ajuste la taille sur y maintenant
+  )
+
+
+#' 
+#' This bar chart presents the number of students who participated in the
+#' PISA assessment by country. There is significant variation in student
+#' participation between countries. Spain, Canada, Italy, Mexico, and
+#' Brazil have the highest numbers of students represented, each with tens
+#' of thousands of participants. Conversely, several countries, often
+#' smaller nations or those with more limited participation—have fewer than
+#' 1,000 students included.
+#' 
+#' Such disparities in participation can reflect differences in country
+#' population size, education system organization, sampling methodologies,
+#' and engagement with the PISA study. Countries with larger student
+#' samples are likely to yield more statistically robust and representative
+#' insights, while those with small samples may experience greater sampling
+#' error and less generalizability. This variation should be considered
+#' when interpreting and comparing student performance across countries.
+#' 
+## ----PISA-data-cleaning-schools-participation, fig.height=16, fig.width=10,message=FALSE, warning=FALSE-----
+knitr::opts_chunk$set(echo=FALSE)
+
+# Plot the student participation distribution
+
+schools_by_country <- student %>%
+  group_by(country_name) %>%
+  summarise(n_schools = n_distinct(school_id)) %>%
+  arrange(desc(n_schools)) %>%
+  mutate(country_name = str_trunc(country_name, 22))  # Tronque à 22 caractères
+
+# Graph
+ggplot(schools_by_country, aes(x = reorder(country_name, n_schools), y = n_schools)) +
+  geom_bar(stat = "identity", fill = "#a4c6f2", color = "white", width = 0.8) +
+  theme_minimal(base_size = 13) +
+  labs(
+    title = "Number of schools participating in PISA by country",
+    x = "Country",
+    y = "Number of schools"
+  ) +
+  scale_y_continuous(labels = label_number(scale = 1, accuracy = 1)) +
+  coord_flip() +
+  theme(
+    axis.text.y = element_text(size = 7)
+  )
+
+#' 
+#' This horizontal bar chart shows the number of schools participating in
+#' the PISA assessment by country. There is substantial variation in school
+#' participation across countries. Spain, Canada, Brazil, and Mexico have
+#' the largest numbers of participating schools, each with over 2,000
+#' schools represented. In contrast, many countries, especially smaller
+#' nations or those with lower participation rates—are represented by fewer
+#' than 100 schools.
+#' 
+#' This wide range may reflect differences in country population size,
+#' education system structure, sampling strategies, or levels of engagement
+#' with the PISA program. Countries with more participating schools are
+#' likely to have more diverse student populations represented, whereas
+#' those with fewer schools may have less statistical power and greater
+#' sampling variability. These differences should be considered when
+#' comparing average student outcomes across countries.
+#' 
+#' ## Database exploration and visualization
+#' 
+#' ### Evolution of the PISA score by Region
+#' 
+#' To examine regional trends in student achievement, a weighted mean of
+#' average student scores was calculated by year and by ILO subregion.\
+#' 
+#' The dataset was constructed by merging student-level performance data
+#' with regional classifications based on country codes. Weighted means
+#' were computed using each student’s sampling weight (`stu_wgt`) to ensure
+#' representativeness.\
+#' 
+#' The resulting summary table was visualized using a line plot, with each
+#' subregion represented by a distinct color. This visualization highlights
+#' the evolution of average student performance across different world
+#' regions over the years covered by the PISA assessments.
+#' 
+## ----PISA-data-exploration, message=FALSE, warning=FALSE, fig.height=10, fig.width=8------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Weighted Mean of Average Student Score by Year and Subregion: year, ilo_subregion, score, stu_wgt
+
+weighted_means <- student %>%
+  group_by(year, ilo_subregion) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) 
+
+ggplot(weighted_means, aes(x = year, y = weighted_mean, color = ilo_subregion, group = ilo_subregion)) +
+  geom_line(linewidth = 1) +
+  geom_point() +
+  labs(
+    title = "Weighted Mean of Average Student Score by Year and Subregion",
+    x = "Year",
+    y = "Weighted Mean Average Score",
+    color = "Subregion"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
+
+#' 
+#' The graph reveals notable differences in average student performance
+#' across ILO subregions over time.\
+#' 
+#' Certain regions, such as Eastern Europe and Northern, Southern and
+#' Western Europe, consistently exhibit higher weighted mean scores, while
+#' regions like Northern Africa and Latin America and the Caribbean tend to
+#' display lower averages.\
+#' 
+#' Most regions show relative stability in performance trends, though some
+#' fluctuations are observed in specific years, which may reflect
+#' educational reforms, socio-economic changes, or variations in sample
+#' composition.\
+#' 
+#' Overall, the persistence of performance gaps between regions underscores
+#' the importance of considering both regional context and policy
+#' interventions in global educational analysis.
+#' 
+## ----PISA-data-exploration-weighted-mean-region-table, message=FALSE, warning=FALSE-------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Filter for 2009 and 2022 only
+wm_09_22 <- weighted_means %>%
+  filter(year %in% c(2009, 2022))
+
+# 2. Keep only subregions with both years available
+regions_both_years <- wm_09_22 %>%
+  group_by(ilo_subregion) %>%
+  filter(n() == 2) %>%
+  pull(ilo_subregion) %>%
+  unique()
+
+wm_09_22 <- wm_09_22 %>%
+  filter(ilo_subregion %in% regions_both_years)
+
+# 3. Convert to wide format (one column per year)
+wm_wide <- wm_09_22 %>%
+  select(ilo_subregion, year, weighted_mean) %>%
+  pivot_wider(
+    names_from = year,
+    values_from = weighted_mean,
+    names_prefix = "score_"
+  )
+
+# 4. Round the scores to integers and calculate percent change
+wm_wide <- wm_wide %>%
+  mutate(
+    score_2009 = round(score_2009, 0),
+    score_2022 = round(score_2022, 0),
+    variation_perc = round((score_2022 - score_2009) / score_2009 * 100, 1)
+  ) %>%
+  arrange(desc(variation_perc))
+
+# 5. Rename columns for readability, using multi-line headers
+colnames(wm_wide) <- c(
+  "Region",
+  "Weighted Mean Average\n2009",
+  "Weighted Mean Average\n2022",
+  "Change (%)"
+)
+
+# 6. Create a styled table with colored header
+wm_wide %>%
+  kbl(
+    caption = "Change in Weighted Mean Average Score by Region (2009–2022)",
+    align = c("l", "c", "c", "c"),
+    format = "html"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(
+    0,
+    bold = TRUE,
+    background = "#dbeafe",
+    color = "#000000"
+  )
+
+
+#' 
+#' ### GDP and Global Education: Mapping PISA Participation by Income Level
+#' 
+#' To better understand the global reach and representativeness of PISA
+#' assessments, this analysis examines the relationship between countries'
+#' economic status and their participation in international educational
+#' evaluations. The methodology involved cross-referencing **the complete
+#' list of PISA participating countries** with the **World Bank's country
+#' classifications** across all income groups.
+#' 
+#' For each World Bank income category, three key metrics were calculated:
+#' the **total number of countries** classified within that income group,
+#' **the number of countries participating in PISA**, and the resulting
+#' **coverage percentage** - representing what proportion of each economic
+#' tier is represented in PISA data.
+#' 
+#' This approach reveals important patterns about which economies engage in
+#' international educational assessment and highlights potential gaps in
+#' global educational monitoring.
+#' 
+## ----PISA-data-exploration-classification -countries-PISA-world-bank, message=FALSE, warning=FALSE----------
+knitr::opts_chunk$set(echo=FALSE)
+
+student <- student %>%
+  clean_names() %>%
+  select(-starts_with("world_bank_income_group_"))
+
+#Create and store the summary table in a variable
+wm_income <- student %>%
+  filter(!is.na(world_bank_income_group)) %>%
+  group_by(world_bank_income_group) %>%
+  summarise(
+    country_count = n_distinct(country),
+    countries = paste(sort(unique(country)), collapse = ", ")
+  ) %>%
+  arrange(match(world_bank_income_group, c("Low income", "Lower-middle income", "Upper-middle income", "High income")))
+
+# List all unique World Bank countries by income group
+wb_summary <- region_income %>%
+  filter(!is.na(world_bank_income_group)) %>%       # Remove entries with missing income group
+  group_by(world_bank_income_group) %>%              # Group by income group
+  summarise(
+    wb_country_count = n_distinct(country),          # Count number of unique countries
+    wb_countries = paste(sort(unique(country)), collapse = ", ")  # List countries alphabetically
+  )
+
+# The number of PISA countries by income group is already calculated in wm_income
+# We need to rename columns to match for joining
+pisa_summary <- wm_income %>%
+  rename(
+    world_bank_income_group = world_bank_income_group,    
+    pisa_country_count = country_count,                   
+    pisa_countries = countries                            
+  )
+
+# Join both summaries on income group
+coverage_summary <- wb_summary %>%
+  left_join(pisa_summary, by = "world_bank_income_group") %>%    # Merge on income group
+  mutate(
+    # If there are no PISA countries for an income group, set count to 0
+    pisa_country_count = ifelse(is.na(pisa_country_count), 0, pisa_country_count),
+    # Calculate PISA coverage percentage in this income group
+    coverage_pct = round(100 * pisa_country_count / wb_country_count, 1)
+  )
+
+# Prepare the table for display (select and rename columns)
+coverage_summary_final <- coverage_summary %>%
+  select(
+    "Income group" = world_bank_income_group,
+    "World Bank countries" = wb_country_count,
+    "PISA countries" = pisa_country_count,
+    "Coverage (%)" = coverage_pct,
+    "PISA country list" = pisa_countries,
+    "WB country list" = wb_countries
+  )
+
+# Add an ordering variable, then arrange by that variable
+coverage_summary_final <- coverage_summary_final %>%
+  mutate(
+    income_order = match(`Income group`, c(
+      "Low income", "Lower-middle income", "Upper-middle income", "High income"
+    ))
+  ) %>%
+  arrange(income_order) %>%
+  select(-income_order)  # remove the helper column
+
+
+# Display the final summary table with kable and custom styling
+coverage_summary_final %>%
+  kbl(
+    caption = "PISA Country Coverage by World Bank Income Group",
+    align = c("l", "c", "c", "c", "l", "l"),
+    format = "html"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(
+    0,
+    bold = TRUE,
+    background = "#dbeafe",
+    color = "#000000"
+  )
+
+
+
+#' 
+#' The findings clearly demonstrate that PISA participation is heavily
+#' skewed toward wealthier nations, which aligns with the program's origins
+#' and institutional framework under the OECD. The data reveals a stark
+#' participation divide across income levels:
+#' 
+#' **High-income countries** show the strongest engagement, with 55.6%
+#' coverage (50 out of 90 countries participating). This represents the
+#' most comprehensive representation within any income group, reflecting
+#' both the financial capacity and institutional priorities of developed
+#' economies.
+#' 
+#' **Upper-middle income countries** demonstrate moderate participation at
+#' 50.8% coverage (30 out of 59 countries), indicating that many emerging
+#' economies prioritize international educational benchmarking as part of
+#' their development strategies.
+#' 
+#' **Lower-middle income countries** show limited participation with only
+#' 26.3% coverage (15 out of 57 countries), suggesting significant barriers
+#' to participation among developing economies.
+#' 
+#' Most strikingly, **low-income countries** have zero participation in
+#' PISA assessments, representing a complete absence of the world's poorest
+#' economies from this influential international educational evaluation.
+#' 
+#' This distribution pattern is understandable given PISA's OECD heritage
+#' and the substantial financial and administrative resources required for
+#' participation.
+#' 
+#' However, it also means that global educational discourse and policy
+#' recommendations are primarily informed by data from non-poor countries,
+#' potentially limiting the relevance of findings for the world's most
+#' economically disadvantaged education systems.
+#' 
+#' ### Educational Mobility Analysis: ESCS Bottom 25% to Top 25% Performance
+#' 
+#' This analysis examines educational mobility by measuring the proportion
+#' of students from the bottom 25% of the Economic, Social and Cultural
+#' Status (ESCS) index who achieve scores in the top 25% of academic
+#' performance. This indicator serves as a crucial measure of educational
+#' equity, as it captures the extent to which socioeconomically
+#' disadvantaged students can overcome their initial disadvantages to
+#' achieve high academic outcomes.
+#' 
+## ----PISA-data-exploration-escs-grades-quartiles, message=FALSE, warning=FALSE------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# 1. Calculate the quartiles for every country and every year
+escs_quartiles <- student %>%
+  filter(!is.na(escs), !is.na(country), !is.na(year)) %>%
+  group_by(country, year) %>%
+  summarise(
+    q25 = quantile(escs, 0.25, na.rm = TRUE),
+    q50 = quantile(escs, 0.50, na.rm = TRUE),
+    q75 = quantile(escs, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 2. Join these quantiles to the original student dataset
+student_with_quartiles <- student %>%
+  left_join(escs_quartiles, by = c("country", "year")) %>%
+  mutate(
+    escs_quartile = case_when(
+      escs <= q25 ~ "Q1 (Bottom 25%)",
+      escs > q25 & escs <= q50 ~ "Q2 (25-50%)",
+      escs > q50 & escs <= q75 ~ "Q3 (50-75%)",
+      escs > q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    )
+  )
+# Now 'student_with_quantiles' contains a 'group' variable for all available years/countries
+
+# Calculate quartiles for all variables
+quartiles_all_vars <- student %>%
+  filter(!is.na(country), !is.na(year)) %>%
+  group_by(country, year) %>%
+  summarise(
+    escs_q25 = quantile(escs, 0.25, na.rm = TRUE),
+    escs_q50 = quantile(escs, 0.50, na.rm = TRUE),
+    escs_q75 = quantile(escs, 0.75, na.rm = TRUE),
+    math_q25 = quantile(math, 0.25, na.rm = TRUE),
+    math_q50 = quantile(math, 0.50, na.rm = TRUE),
+    math_q75 = quantile(math, 0.75, na.rm = TRUE),
+    read_q25 = quantile(read, 0.25, na.rm = TRUE),
+    read_q50 = quantile(read, 0.50, na.rm = TRUE),
+    read_q75 = quantile(read, 0.75, na.rm = TRUE),
+    science_q25 = quantile(science, 0.25, na.rm = TRUE),
+    science_q50 = quantile(science, 0.50, na.rm = TRUE),
+    science_q75 = quantile(science, 0.75, na.rm = TRUE),
+    avg_score_q25 = quantile(avg_score, 0.25, na.rm = TRUE),
+    avg_score_q50 = quantile(avg_score, 0.50, na.rm = TRUE),
+    avg_score_q75 = quantile(avg_score, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Add the quartile bounds to each student
+student_with_all_quartiles <- student %>%
+  left_join(quartiles_all_vars, by = c("country", "year"))
+
+#Assign the quartile to each student for each variable
+student_with_all_quartiles <- student_with_all_quartiles %>%
+  mutate(
+    escs_quartile = case_when(
+      escs <= escs_q25 ~ "Q1 (Bottom 25%)",
+      escs > escs_q25 & escs <= escs_q50 ~ "Q2 (25-50%)",
+      escs > escs_q50 & escs <= escs_q75 ~ "Q3 (50-75%)",
+      escs > escs_q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    ),
+    math_quartile = case_when(
+      math <= math_q25 ~ "Q1 (Bottom 25%)",
+      math > math_q25 & math <= math_q50 ~ "Q2 (25-50%)",
+      math > math_q50 & math <= math_q75 ~ "Q3 (50-75%)",
+      math > math_q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    ),
+    read_quartile = case_when(
+      read <= read_q25 ~ "Q1 (Bottom 25%)",
+      read > read_q25 & read <= read_q50 ~ "Q2 (25-50%)",
+      read > read_q50 & read <= read_q75 ~ "Q3 (50-75%)",
+      read > read_q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    ),
+    science_quartile = case_when(
+      science <= science_q25 ~ "Q1 (Bottom 25%)",
+      science > science_q25 & science <= science_q50 ~ "Q2 (25-50%)",
+      science > science_q50 & science <= science_q75 ~ "Q3 (50-75%)",
+      science > science_q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    ),
+    avg_score_quartile = case_when(
+      avg_score <= avg_score_q25 ~ "Q1 (Bottom 25%)",
+      avg_score > avg_score_q25 & avg_score <= avg_score_q50 ~ "Q2 (25-50%)",
+      avg_score > avg_score_q50 & avg_score <= avg_score_q75 ~ "Q3 (50-75%)",
+      avg_score > avg_score_q75 ~ "Q4 (Top 25%)",
+      TRUE ~ NA_character_
+    )
+  )
+
+
+#' 
+#' The data is stratified by World Bank income classifications (High
+#' income, Upper-middle income, and Lower-middle income countries) and
+#' spans from 2003 to 2022, excluding the year 2000 due to a insufficient
+#' number of students in certain groups. This longitudinal approach allows
+#' us to observe trends in educational mobility across different economic
+#' contexts and time periods.
+#' 
+## ----PISA-data-exploration-bottom-escs-top-grades-quartiles, message=FALSE, warning=FALSE-------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Calculate the desired proportion for each year x income level combination
+result_proportion <- student_with_all_quartiles %>%
+  filter(
+    !is.na(world_bank_income_group),
+    !is.na(year),
+    !is.na(escs_quartile),
+    !is.na(avg_score_quartile),
+    year != 2000
+  ) %>%
+  group_by(year, world_bank_income_group) %>%
+  summarise(
+    n_total = n(),
+    n_bottom_escs_top_avg = sum(escs_quartile == "Q1 (Bottom 25%)" & avg_score_quartile == "Q4 (Top 25%)", na.rm = TRUE),
+    prop_bottom_escs_top_avg = round(100 * n_bottom_escs_top_avg / n_total, 2)
+  ) %>%
+  ungroup() %>%
+  arrange(world_bank_income_group, year)
+
+# 3. Calculate the average of the Top 25% avg_score scores per group
+mean_top25 <- student_with_all_quartiles %>%
+  filter(
+    !is.na(world_bank_income_group),
+    !is.na(year),
+    avg_score_quartile == "Q4 (Top 25%)"
+  ) %>%
+  group_by(year, world_bank_income_group) %>%
+  summarise(
+    `Top 25% avg_score Mean` = round(mean(avg_score, na.rm = TRUE), 0),
+    .groups = "drop"
+  )
+
+# 4. Attach this column to your main table
+result_proportion <- result_proportion %>%
+  left_join(mean_top25, by = c("year", "world_bank_income_group")) %>%
+  rename(
+    "Year" = year,
+    "World Bank Income Group" = world_bank_income_group,
+    "Total Students" = n_total,
+    "N (Bottom 25% ESCS & Top 25% Score)" = n_bottom_escs_top_avg,
+    "Proportion (%)" = prop_bottom_escs_top_avg,
+    "Top 25% avg_score Mean" = `Top 25% avg_score Mean`
+  )%>%
+  mutate(
+    `Total Students` = format(`Total Students`, big.mark = " "),
+    `N (Bottom 25% ESCS & Top 25% Score)` = format(`N (Bottom 25% ESCS & Top 25% Score)`, big.mark = " ")
+  )
+
+# 5. A table summarizing the information
+result_proportion %>%
+  knitr::kable(
+    caption = "Proportion of students in Bottom 25% ESCS and Top 25% avg_score by World Bank income group and year"
+  )
+
+#' 
+#' The comprehensive table reveals several important patterns across income
+#' groups:
+#' 
+#' **Lower-Middle Income Countries:** This group demonstrates the highest
+#' educational mobility rates, with proportions ranging from 2.39% to
+#' 3.52%. The peak occurs in 2009 (3.52%), followed by fluctuations
+#' including a notable drop in 2018 (2.39%) and recovery by 2022 (3.17%).
+#' This pattern suggests that countries in this income bracket may have
+#' more fluid social structures or educational systems that are more
+#' effective at promoting mobility among disadvantaged students.
+#' 
+#' **Upper-Middle Income Countries:** These nations show intermediate
+#' mobility rates (2.60% to 2.79%), with relatively stable performance over
+#' time. The consistency of these figures suggests a middle ground between
+#' the other two groups, possibly reflecting moderate levels of both
+#' resources and social stratification.
+#' 
+#' **High-Income Countries:** These nations consistently show the lowest
+#' rates of educational mobility, with proportions ranging from 2.41% to
+#' 2.78%. This paradoxical finding suggests that despite greater overall
+#' resources, high-income countries may have more entrenched socioeconomic
+#' stratification in their educational systems. The relatively stable trend
+#' over time (slight decline from 2015 onwards) indicates persistent
+#' inequality despite economic prosperity.
+#' 
+## ----PISA-data-exploration-bottom-escs-top-grades-quartiles-graph, message=FALSE, warning=FALSE-------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Plot
+
+
+ggplot(result_proportion %>% filter(Year != 2000), 
+       aes(x = Year, y = `Proportion (%)`, color = `World Bank Income Group`, group = `World Bank Income Group`)) +
+  geom_line(size = 1.2) +
+  geom_point(size = 2) +
+  labs(
+    title = "Educational Mobility: % of Students in Bottom 25% ESCS & Top 25% avg_score (2000 excluded)",
+    x = "Year",
+    y = "Proportion (%)",
+    color = "WB Income Group"
+  ) +
+  theme_minimal()
+
+#' 
+#' **The visual representation of these data reveals several striking
+#' patterns:**
+#' 
+#' **Divergent Trajectories:** The most remarkable feature is the dramatic
+#' divergence that occurs around 2018. While high-income and upper-middle
+#' income countries maintain relatively stable, low levels of educational
+#' mobility, lower-middle income countries experience significant
+#' volatility.
+#' 
+#' **The 2018 Anomaly:** All three income groups converge around 2018, with
+#' lower-middle income countries experiencing their lowest point (2.39%).
+#' This convergence is followed by a sharp recovery for lower-middle income
+#' countries by 2022, while the other groups remain relatively unchanged.
+#' 
+#' **Stability vs. Volatility:** High-income and upper-middle income
+#' countries show remarkable stability across the time period, suggesting
+#' established educational systems with consistent (though limited)
+#' mobility outcomes. In contrast, lower-middle income countries exhibit
+#' much greater variability, which could reflect ongoing educational
+#' reforms, economic instability, or different measurement sensitivities.
+#' 
+#' **Counter-Intuitive Findings:** The data challenges conventional
+#' assumptions about the relationship between national wealth and
+#' educational equity. The fact that lower-middle income countries
+#' generally outperform high-income countries in educational mobility
+#' suggests that factors beyond simple resource availability—such as social
+#' structure, educational policy, or cultural values—play crucial roles in
+#' determining educational outcomes for disadvantaged students.
+#' 
+#' **Implications:** These findings have significant implications for
+#' educational policy and our understanding of equity. They suggest that
+#' educational mobility is not simply a function of national wealth, but
+#' rather depends on complex interactions between social structures,
+#' educational policies, and cultural factors. The superior performance of
+#' lower-middle income countries in promoting educational mobility may
+#' offer valuable lessons for higher-income nations seeking to improve
+#' equity in their educational systems.
+#' 
+#' ### PISA Performance in Lower-Income Countries: The Socioeconomic Achievement Gap Across Time
+#' 
+#' This analysis examines PISA performance trends for the countries
+#' classified as lower-middle income countries by the World Bank. This
+#' analysis gives a specific focus on socioeconomic disparities within
+#' educational systems. The visualization presents weighted mean scores
+#' across three assessment cycles (2003, 2018, and 2022) for countries
+#' participating in PISA while classified as lower-middle income economies.
+#' 
+## ----PISA-data-exploration-escs-low-middle-income, message=FALSE, warning=FALSE-----------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+ 
+# 1. Data Preparation: Clean Codes and Names Everywhere
+ 
+region_income <- region_income %>%
+  mutate(
+    country = toupper(trimws(as.character(country))),
+    country_name = trimws(as.character(country_name))
+  )
+
+student_with_all_quartiles <- student_with_all_quartiles %>%
+  mutate(
+    country = toupper(trimws(as.character(country)))
+  )
+
+ 
+# 2. Compute Weighted Means for Each Social Group
+ 
+means_lm <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "Lower-middle income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+segments_lm <- means_lm %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  ) %>%
+  rename(
+    `Bottom 25%` = `Q1 (Bottom 25%)`,
+    `Top 25%` = `Q4 (Top 25%)`
+  ) %>%
+  mutate(across(everything(), as.character)) # Set all columns to character
+
+ 
+# 3. Calculate Average for Lower-middle Income Group
+ 
+avg_segments <- segments_lm %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Bottom 25%`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Top 25%`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (Lower-middle income)",
+    country_name = "Average (Lower-middle income)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 4. Calculate Average for All Countries
+ 
+means_all <- student_with_all_quartiles %>%
+  filter(
+    year %in% c(2003, 2018, 2022),
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Q1 (Bottom 25%)`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Q4 (Top 25%)`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (All countries)",
+    country_name = "Average (All countries)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 5. Harmonize and Check Columns Before Merging
+ 
+columns_needed <- c("country", "year", "Bottom 25%", "Top 25%", "country_name")
+segments_lm <- segments_lm[, columns_needed]
+avg_segments <- avg_segments[, columns_needed]
+means_all <- means_all[, columns_needed]
+
+ 
+# 6. Bind All Dataframes for Plotting
+ 
+segments_lm_plot <- bind_rows(segments_lm, avg_segments, means_all)
+
+ 
+# 7. Final Correction: Fill NA country_name with Code if Needed
+ 
+segments_lm_plot$country_name <- as.character(segments_lm_plot$country_name)
+segments_lm_plot <- segments_lm_plot %>%
+  mutate(
+    country_name = ifelse(is.na(country_name) | country_name == "NA", country, country_name)
+  )
+
+ 
+# 8. Diagnostic: List Countries with Missing Names
+ 
+#Only if needed
+#print(segments_lm_plot %>% filter(is.na(year) | is.na(country_name)))
+
+ 
+# 9. Set Order for Plotting
+ 
+countries_order_2022 <- segments_lm_plot %>%
+  filter(year == "2022", !grepl("Average", country_name)) %>%
+  arrange(as.numeric(`Bottom 25%`)) %>%
+  pull(country_name) %>%
+  unique()
+
+all_specials <- c("Average (Lower-middle income)", "Average (All countries)")
+
+other_countries <- segments_lm_plot %>%
+  filter(!country_name %in% c(countries_order_2022, all_specials)) %>%
+  pull(country_name) %>%
+  unique()
+
+country_levels <- c(countries_order_2022, other_countries, all_specials)
+
+segments_lm_plot$country_name <- factor(segments_lm_plot$country_name, levels = country_levels)
+
+segments_lm_plot <- segments_lm_plot %>%
+  filter(year %in% c(2003, 2018, 2022))
+
+ 
+# 10. Plot Results
+ 
+
+ggplot(segments_lm_plot, aes(y = country_name)) +
+  geom_segment(
+    aes(x = as.numeric(`Bottom 25%`), xend = as.numeric(`Top 25%`), yend = country_name, color = as.factor(year)),
+    size = 0.7,
+    data = segments_lm_plot %>% filter(!is.na(`Bottom 25%`), !is.na(`Top 25%`))
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Bottom 25%`), color = as.factor(year)),
+    size = 3, shape = 16
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Top 25%`), color = as.factor(year)),
+    size = 3, shape = 18
+  ) +
+  labs(
+    title = "Change in Mean Scores by Social Background \n(Lower-middle income countries)",
+    x = "Weighted Mean Score",
+    y = NULL,
+    color = "Year"
+  ) +
+  scale_color_manual(
+    values = c("2003" = "#FFD700", "2018" = "#23395d", "2022" = "#F577e0"),
+    labels = c("2003" = "Year 2003", "2018" = "Year 2018", "2022" = "Year 2022")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+ 
+# 11. Debugging: List any unmatched country codes
+ 
+
+missing_codes <- anti_join(
+  segments_lm %>% select(country) %>% distinct(),
+  region_income %>% select(country) %>% distinct(),
+  by = "country"
+)
+#print(missing_codes)  #print if problems encountered
+
+
+#' 
+## ----PISA-data-exploration-escs-upper-lower-income-table, message=FALSE, warning=FALSE----------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Prepare the summary data (weighted means per country/year/quartile) 
+
+means_by_quartile <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "Lower-middle income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt),
+    year %in% c(2003, 2018, 2022)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = escs_quartile,
+    values_from = mean_score
+  ) %>%
+  filter(!is.na(`Q1 (Bottom 25%)`), !is.na(`Q4 (Top 25%)`))
+
+# 2. For each country, pick the most recent year available ---
+latest_year <- means_by_quartile %>%
+  group_by(country) %>%
+  filter(year == max(year, na.rm = TRUE)) %>%
+  ungroup()
+
+# 3. Add country names ---
+latest_year <- latest_year %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  )
+
+# 4. Compute the difference and format columns ---
+summary_table <- latest_year %>%
+  transmute(
+    Country = country_name,
+    `Q1 Mean Score (Bottom 25% ESCS)` = round(`Q1 (Bottom 25%)`, 0),
+    `Q4 Mean Score (Top 25% ESCS)` = round(`Q4 (Top 25%)`, 0),
+    `Difference (Q4 - Q1)` = round(`Q4 (Top 25%)` - `Q1 (Bottom 25%)`, 0),
+    Year = year
+  ) %>%
+  arrange(desc(`Difference (Q4 - Q1)`))
+
+# 5. Display the table ---
+knitr::kable(
+  summary_table,
+  caption = "Difference in Mean Scores between Top and Bottom ESCS Quartiles (Most Recent Year, Lower-middle Income Countries)",
+  align = "lcccl"
+)
+
+
+#' 
+#' The data reveals dramatic differences in educational equity across
+#' lower-middle income countries, with socioeconomic gaps ranging from as
+#' narrow as 11 points in **Cambodia** to as wide as 91 points in
+#' **Lebanon**.
+#' 
+#' **Lebanon** stands out with the largest achievement gap (91 points)
+#' between the bottom and top quartiles, indicating severe educational
+#' inequality despite being classified in the same income category as more
+#' equitable systems. **Mongolia** and **Ukraine** also show substantial
+#' gaps of 86 and 83 points respectively, suggesting that higher-performing
+#' students significantly outpace their disadvantaged peers.
+#' 
+#' In contrast, **Cambodia** demonstrates remarkable equity with only an
+#' 11-point gap, followed by **Uzbekistan** (22 points) and **Morocco** (36
+#' points). These countries appear to have more compressed achievement
+#' distributions, though this may reflect both lower overall performance
+#' levels and different educational system structures.
+#' 
+#' **Vietnam** presents an interesting case with a moderate 68-point gap ;
+#' while achieving relatively high absolute performance levels, it still
+#' maintains reasonable equity compared to countries like **Lebanon** or
+#' **Mongolia**. This suggests **Vietnam** has managed to raise overall
+#' achievement without creating excessive disparities. The **Philippines**
+#' and **Occupied Palestinian** Territory both show 47-point gaps,
+#' representing a middle ground in this group. These moderate gaps suggest
+#' some inequality but not at the extreme levels seen in **Lebanon** or
+#' **Mongolia**.
+#' 
+#' This analysis demonstrates that within the lower-middle income
+#' classification, educational equity varies tremendously, with some
+#' countries achieving relatively compressed achievement distributions
+#' while others exhibit gaps comparable to more stratified educational
+#' systems.
+#' 
+#' ### PISA Performance in Upper-Income Countries: The Socioeconomic Achievement Gap Across Time
+#' 
+#' The below analysis focuses on three key time points: 2003, 2018, and
+#' 2022. The data represents weighted mean scores by ESCS quartiles (bottom
+#' 25% vs top 25%). The achievement gaps are calculated as the difference
+#' between top and bottom quartile performance. The countries included here
+#' are based on World Bank Upper-middle income classification.
+#' 
+## ----PISA-data-exploration-escs-upper-middle-income, message=FALSE, warning=FALSE---------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+ 
+# 1. Data Preparation: Clean Codes and Names Everywhere
+ 
+region_income <- region_income %>%
+  mutate(
+    country = toupper(trimws(as.character(country))),
+    country_name = trimws(as.character(country_name))
+  )
+
+student_with_all_quartiles <- student_with_all_quartiles %>%
+  mutate(
+    country = toupper(trimws(as.character(country)))
+  )
+
+ 
+# 2. Compute Weighted Means for Each Social Group
+ 
+means_lm <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "Upper-middle income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+segments_lm <- means_lm %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  ) %>%
+  rename(
+    `Bottom 25%` = `Q1 (Bottom 25%)`,
+    `Top 25%` = `Q4 (Top 25%)`
+  ) %>%
+  mutate(across(everything(), as.character)) # Set all columns to character
+
+ 
+# 3. Calculate Average for Upper-middle Income Group
+ 
+avg_segments <- segments_lm %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Bottom 25%`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Top 25%`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (Upper-middle income)",
+    country_name = "Average (Upper-middle income)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 4. Calculate Average for All Countries
+ 
+means_all <- student_with_all_quartiles %>%
+  filter(
+    year %in% c(2003, 2018, 2022),
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Q1 (Bottom 25%)`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Q4 (Top 25%)`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (All countries)",
+    country_name = "Average (All countries)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 5. Harmonize and Check Columns Before Merging
+ 
+columns_needed <- c("country", "year", "Bottom 25%", "Top 25%", "country_name")
+segments_lm <- segments_lm[, columns_needed]
+avg_segments <- avg_segments[, columns_needed]
+means_all <- means_all[, columns_needed]
+
+ 
+# 6. Bind All Dataframes for Plotting
+ 
+segments_lm_plot <- bind_rows(segments_lm, avg_segments, means_all)
+
+ 
+# 7. Final Correction: Fill NA country_name with Code if Needed
+ 
+segments_lm_plot$country_name <- as.character(segments_lm_plot$country_name)
+segments_lm_plot <- segments_lm_plot %>%
+  mutate(
+    country_name = ifelse(is.na(country_name) | country_name == "NA", country, country_name)
+  )
+
+ 
+# 8. Diagnostic: List Countries with Missing Names
+ 
+#Only if needed
+#print(segments_lm_plot %>% filter(is.na(year) | is.na(country_name)))
+
+ 
+# 9. Set Order for Plotting
+ 
+countries_order_2022 <- segments_lm_plot %>%
+  filter(year == "2022", !grepl("Average", country_name)) %>%
+  arrange(as.numeric(`Bottom 25%`)) %>%
+  pull(country_name) %>%
+  unique()
+
+all_specials <- c("Average (Upper-middle income)", "Average (All countries)")
+
+other_countries <- segments_lm_plot %>%
+  filter(!country_name %in% c(countries_order_2022, all_specials)) %>%
+  pull(country_name) %>%
+  unique()
+
+country_levels <- c(countries_order_2022, other_countries, all_specials)
+
+segments_lm_plot$country_name <- factor(segments_lm_plot$country_name, levels = country_levels)
+
+segments_lm_plot <- segments_lm_plot %>%
+  filter(year %in% c(2003, 2018, 2022))
+
+ 
+# 10. Plot Results
+ 
+
+ggplot(segments_lm_plot, aes(y = country_name)) +
+  geom_segment(
+    aes(x = as.numeric(`Bottom 25%`), xend = as.numeric(`Top 25%`), yend = country_name, color = as.factor(year)),
+    size = 0.7,
+    data = segments_lm_plot %>% filter(!is.na(`Bottom 25%`), !is.na(`Top 25%`))
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Bottom 25%`), color = as.factor(year)),
+    size = 3, shape = 16
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Top 25%`), color = as.factor(year)),
+    size = 3, shape = 18
+  ) +
+  labs(
+    title = "Change in Mean Scores by Social Background \n(Upper-middle income countries)",
+    x = "Weighted Mean Score",
+    y = NULL,
+    color = "Year"
+  ) +
+  scale_color_manual(
+    values = c("2003" = "#FFD700", "2018" = "#23395d", "2022" = "#F577e0"),
+    labels = c("2003" = "Year 2003", "2018" = "Year 2018", "2022" = "Year 2022")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+ 
+# 11. Debugging: List any unmatched country codes
+ 
+
+missing_codes <- anti_join(
+  segments_lm %>% select(country) %>% distinct(),
+  region_income %>% select(country) %>% distinct(),
+  by = "country"
+)
+#print(missing_codes)  #print if problems encountered
+
+#' 
+## ----PISA-data-exploration-escs-upper-middle-income-table, message=FALSE, warning=FALSE---------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Prepare the summary data (weighted means per country/year/quartile) 
+
+means_by_quartile <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "Upper-middle income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt),
+    year %in% c(2003, 2018, 2022)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = escs_quartile,
+    values_from = mean_score
+  ) %>%
+  filter(!is.na(`Q1 (Bottom 25%)`), !is.na(`Q4 (Top 25%)`))
+
+# 2. For each country, pick the most recent year available ---
+latest_year <- means_by_quartile %>%
+  group_by(country) %>%
+  filter(year == max(year, na.rm = TRUE)) %>%
+  ungroup()
+
+# 3. Add country names 
+latest_year <- latest_year %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  )
+
+# 4. Compute the difference and format columns 
+summary_table <- latest_year %>%
+  transmute(
+    Country = country_name,
+    `Q1 Mean Score (Bottom 25% ESCS)` = round(`Q1 (Bottom 25%)`, 0),
+    `Q4 Mean Score (Top 25% ESCS)` = round(`Q4 (Top 25%)`, 0),
+    `Difference (Q4 - Q1)` = round(`Q4 (Top 25%)` - `Q1 (Bottom 25%)`, 0),
+    Year = year
+  ) %>%
+  arrange(desc(`Difference (Q4 - Q1)`))
+
+# 5. Display the table 
+knitr::kable(
+  summary_table,
+  caption = "Difference in Mean Scores between Top and Bottom ESCS Quartiles (Most Recent Year, Upper-middle Income Countries)",
+  align = "lcccl"
+)
+
+
+
+#' 
+#' **Persistent Achievement Gaps:**
+#' 
+#' Upper-middle income countries demonstrate substantial and persistent
+#' achievement gaps between students from different socioeconomic
+#' backgrounds. The performance differences between the bottom 25% and top
+#' 25% of students by ESCS (Economic, Social and Cultural Status) range
+#' from approximately 40 to over 110 points across countries and
+#' measurement years.
+#' 
+#' **Temporal Evolution:**
+#' 
+#' The data reveals varying patterns of change across the three time points
+#' (2003, 2018, and 2022). Many countries show notable shifts in
+#' performance levels and gap sizes, suggesting that educational systems in
+#' these nations are experiencing dynamic changes rather than stagnation.
+#' 
+#' **Country-Specific Observations:**
+#' 
+#' Several countries show incomplete data across the three time periods.
+#' Countries such as **Costa Rica**,**China**, and **Belarus** have limited
+#' participation in certain PISA cycles, affecting longitudinal
+#' comparisons.
+#' 
+#' **Highest Performing Countries:**
+#' 
+#' **China** leads in absolute performance with the top 25% ESCS students
+#' scoring 630 points, though with a substantial 79-point gap. **Îles Turks
+#' et Caicos** shows exceptional performance for advantaged students (506
+#' points) but with a concerning 74-point gap. **Russian Federation** (2018
+#' data) demonstrates strong performance with top students at 512 points
+#' and a moderate 64-point gap. **Belarus** (2018 data) achieves high
+#' performance (523 points for top 25%) but maintains a significant
+#' 100-point gap.
+#' 
+#' **Most Equitable Systems:**
+#' 
+#' **Kosovo** displays the smallest achievement gap at just 39 points,
+#' though both groups perform at lower absolute levels (338-376 points).
+#' **Kazakhstan** shows strong equity with a 45-point gap and reasonable
+#' performance levels (395-439 points). **Jordan** and **Albania**
+#' demonstrate relatively small gaps (47 points each) with moderate
+#' performance levels.
+#' 
+#' These countries prove that more equitable outcomes are achievable,
+#' though often at lower absolute performance levels.
+#' 
+#' **Largest Achievement Gaps:**
+#' 
+#' **Bulgaria** exhibits the widest gap at 111 points (360-471 points),
+#' indicating severe inequality despite decent top-performer achievement.
+#' **Belarus** shows a 100-point gap, combining high performance with
+#' significant inequality. **Colombia**(92-point gap) and Peru (91-point
+#' gap) demonstrate substantial inequities in South American contexts.
+#' 
+#' These large gaps suggest deeply embedded structural inequalities that
+#' persist despite national economic development.
+#' 
+#' **Countries Showing Improvement:**
+#' 
+#' **Mexico** demonstrates substantial progress across both socioeconomic
+#' groups from 2003 to 2022, with particularly notable gains for
+#' disadvantaged students. **Brazil** exhibits modest improvements,
+#' particularly for the bottom 25% of students. **Argentina** shows signs
+#' of convergence between groups over time, suggesting improving equity
+#' without sacrificing overall performance.
+#' 
+#' **Countries with Declining Performance:**
+#' 
+#' Several countries, including **Montenegro**, **Malaysia** and
+#' **Thailand**, show concerning declines in performance for both groups
+#' between 2018 and 2022.
+#' 
+#' **Stability Patterns:**
+#' 
+#' Countries like **Serbia** and **Georgia** show remarkable consistency
+#' across time periods, maintaining both their performance levels and gap
+#' sizes. This stability could indicate either effective policy consistency
+#' or systemic rigidity.
+#' 
+#' **Group Average Performance: The upper-middle income country average
+#' shows:**
+#' 
+#' **Top 25% ESCS students:** range from 376 points (Kosovo) to 630 points
+#' (China), with most countries between 400-500 points. **Bottom 25% ESCS
+#' students:** range from 330 points (Dominican Republic) to 551 points
+#' (China), with most countries between 340-400 points. **Achievement
+#' gaps:** range from 39 points (Kosovo) to 111 points (Bulgaria), with an
+#' average gap of approximately 67 points across all countries. **The
+#' median gap** is around 69 points, indicating that most countries cluster
+#' around this moderate inequality level.
+#' 
+#' **Critical Insights and Policy Implications:**
+#' 
+#' **The Middle-Income Challenge:** Upper-middle income countries face a
+#' distinctive educational challenge; having sufficient economic resources
+#' to support quality education while struggling with persistent
+#' inequality. T he data suggests that economic development alone is
+#' insufficient to ensure equitable educational outcomes.
+#' 
+#' **Successful Models:** Countries like **Russia**, **China** and **Costa
+#' Rica** demonstrate that upper-middle income status can support both
+#' relatively high achievement and manageable equity gaps, providing
+#' potential models for policy learning. We can question whether for China
+#' and Russia the school that have participated in PISA are representative
+#' of the true level of education within the country or only in the
+#' wealthiest regions.
+#' 
+#' **Dynamic vs. Static Systems:** This data reveals that many upper-middle
+#' income countries are experiencing significant changes in their
+#' educational outcomes, both positive and negative. This dynamism suggests
+#' that policy interventions can have measurable impacts.
+#' 
+#' **Resource Allocation Implications:** The variation in both absolute
+#' performance and equity outcomes within this income group suggests that
+#' how resources are allocated and policies are implemented may be more
+#' critical than the absolute level of national wealth in determining
+#' educational outcomes.
+#' 
+#' **Future Trajectory Concerns:** The mixed patterns of improvement and
+#' decline across countries highlight the need for sustained policy
+#' attention to both excellence and equity in educational systems, as gains
+#' can be reversed without consistent effort.
+#' 
+#' ### PISA Performance in High Income Countries: The Socioeconomic Achievement Gap Across Time
+#' 
+#' The below analysis focuses on three key time points: 2003, 2018, and
+#' 2022. The data represents weighted mean scores by ESCS quartiles (bottom
+#' 25% vs top 25%). The achievement gaps are calculated as the difference
+#' between top and bottom quartile performance. The countries included here
+#' are based on World Bank High income classification.
+#' 
+## ----PISA-data-exploration-escs-High-income, fig.width=8, fig.height=15, message=FALSE, warning=FALSE-------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+ 
+# 1. Data Preparation: Clean Codes and Names Everywhere
+ 
+region_income <- region_income %>%
+  mutate(
+    country = toupper(trimws(as.character(country))),
+    country_name = trimws(as.character(country_name))
+  )
+
+student_with_all_quartiles <- student_with_all_quartiles %>%
+  mutate(
+    country = toupper(trimws(as.character(country)))
+  )
+
+ 
+# 2. Compute Weighted Means for Each Social Group
+ 
+means_lm <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "High income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+segments_lm <- means_lm %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  ) %>%
+  rename(
+    `Bottom 25%` = `Q1 (Bottom 25%)`,
+    `Top 25%` = `Q4 (Top 25%)`
+  ) %>%
+  mutate(across(everything(), as.character)) # Set all columns to character
+
+ 
+# 3. Calculate Average for High Income Group
+ 
+avg_segments <- segments_lm %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Bottom 25%`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Top 25%`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (High income)",
+    country_name = "Average (High income)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 4. Calculate Average for All Countries
+ 
+means_all <- student_with_all_quartiles %>%
+  filter(
+    year %in% c(2003, 2018, 2022),
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    weighted_mean = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    id_cols = c(country, year),
+    names_from = escs_quartile,
+    values_from = weighted_mean
+  ) %>%
+  filter(
+    !is.na(country),
+    !is.na(`Q1 (Bottom 25%)`),
+    !is.na(`Q4 (Top 25%)`)
+  ) %>%
+  group_by(year) %>%
+  summarise(
+    `Bottom 25%` = mean(as.numeric(`Q1 (Bottom 25%)`), na.rm = TRUE),
+    `Top 25%` = mean(as.numeric(`Q4 (Top 25%)`), na.rm = TRUE)
+  ) %>%
+  mutate(
+    country = "Average (All countries)",
+    country_name = "Average (All countries)"
+  ) %>%
+  mutate(across(everything(), as.character))
+
+ 
+# 5. Harmonize and Check Columns Before Merging
+ 
+columns_needed <- c("country", "year", "Bottom 25%", "Top 25%", "country_name")
+segments_lm <- segments_lm[, columns_needed]
+avg_segments <- avg_segments[, columns_needed]
+means_all <- means_all[, columns_needed]
+
+ 
+# 6. Bind All Dataframes for Plotting
+ 
+segments_lm_plot <- bind_rows(segments_lm, avg_segments, means_all)
+
+ 
+# 7. Final Correction: Fill NA country_name with Code if Needed
+ 
+segments_lm_plot$country_name <- as.character(segments_lm_plot$country_name)
+segments_lm_plot <- segments_lm_plot %>%
+  mutate(
+    country_name = ifelse(is.na(country_name) | country_name == "NA", country, country_name)
+  )
+
+ 
+# 8. Diagnostic: List Countries with Missing Names
+ 
+#Only if needed
+#print(segments_lm_plot %>% filter(is.na(year) | is.na(country_name)))
+
+ 
+# 9. Set Order for Plotting
+ 
+countries_order_2022 <- segments_lm_plot %>%
+  filter(year == "2022", !grepl("Average", country_name)) %>%
+  arrange(as.numeric(`Bottom 25%`)) %>%
+  pull(country_name) %>%
+  unique()
+
+all_specials <- c("Average (High income)", "Average (All countries)")
+
+other_countries <- segments_lm_plot %>%
+  filter(!country_name %in% c(countries_order_2022, all_specials)) %>%
+  pull(country_name) %>%
+  unique()
+
+country_levels <- c(countries_order_2022, other_countries, all_specials)
+
+segments_lm_plot$country_name <- factor(segments_lm_plot$country_name, levels = country_levels)
+
+segments_lm_plot <- segments_lm_plot %>%
+  filter(year %in% c(2003, 2018, 2022))
+
+ 
+# 10. Plot Results
+ 
+
+ggplot(segments_lm_plot, aes(y = country_name)) +
+  geom_segment(
+    aes(x = as.numeric(`Bottom 25%`), xend = as.numeric(`Top 25%`), yend = country_name, color = as.factor(year)),
+    size = 0.7,
+    data = segments_lm_plot %>% filter(!is.na(`Bottom 25%`), !is.na(`Top 25%`))
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Bottom 25%`), color = as.factor(year)),
+    size = 3, shape = 16
+  ) +
+  geom_point(
+    aes(x = as.numeric(`Top 25%`), color = as.factor(year)),
+    size = 3, shape = 18
+  ) +
+  labs(
+    title = "Change in Mean Scores by Social Background \n(High income countries)",
+    x = "Weighted Mean Score",
+    y = NULL,
+    color = "Year"
+  ) +
+  scale_color_manual(
+    values = c("2003" = "#FFD700", "2018" = "#23395d", "2022" = "#F577e0"),
+    labels = c("2003" = "Year 2003", "2018" = "Year 2018", "2022" = "Year 2022")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.y = element_text(size = 8),
+    plot.title = element_text(face = "bold", hjust = 0.5)
+  )
+
+ 
+# 11. Debugging: List any unmatched country codes
+ 
+
+missing_codes <- anti_join(
+  segments_lm %>% select(country) %>% distinct(),
+  region_income %>% select(country) %>% distinct(),
+  by = "country"
+)
+#print(missing_codes)  #print if problems encountered
+
+#' 
+## ----PISA-data-exploration-escs-high-income-table, message=FALSE, warning=FALSE-----------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Prepare the summary data (weighted means per country/year/quartile) 
+
+means_by_quartile <- student_with_all_quartiles %>%
+  filter(
+    world_bank_income_group == "High income",
+    escs_quartile %in% c("Q1 (Bottom 25%)", "Q4 (Top 25%)"),
+    !is.na(avg_score), !is.na(stu_wgt),
+    year %in% c(2003, 2018, 2022)
+  ) %>%
+  group_by(country, year, escs_quartile) %>%
+  summarise(
+    mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = escs_quartile,
+    values_from = mean_score
+  ) %>%
+  filter(!is.na(`Q1 (Bottom 25%)`), !is.na(`Q4 (Top 25%)`))
+
+# 2. For each country, pick the most recent year available ---
+latest_year <- means_by_quartile %>%
+  group_by(country) %>%
+  filter(year == max(year, na.rm = TRUE)) %>%
+  ungroup()
+
+# 3. Add country names ---
+latest_year <- latest_year %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(
+    country_name = ifelse(is.na(country_name), country, country_name)
+  )
+
+# 4. Compute the difference and format columns ---
+summary_table <- latest_year %>%
+  transmute(
+    Country = country_name,
+    `Q1 Mean Score (Bottom 25% ESCS)` = round(`Q1 (Bottom 25%)`, 0),
+    `Q4 Mean Score (Top 25% ESCS)` = round(`Q4 (Top 25%)`, 0),
+    `Difference (Q4 - Q1)` = round(`Q4 (Top 25%)` - `Q1 (Bottom 25%)`, 0),
+    Year = year
+  ) %>%
+  arrange(desc(`Difference (Q4 - Q1)`))
+
+# 5. Display the table ---
+knitr::kable(
+  summary_table,
+  caption = "Difference in Mean Scores between Top and Bottom ESCS Quartiles \n illustrates the educational equity gap \n (Most Recent Year, High Income Countries)",
+  align = "lcccl"
+)
+
+
+
+#' 
+#' **Overall Patterns and Characteristics**
+#' 
+#' **Substantial Achievement Gaps:**
+#' 
+#' High-income countries demonstrate some of the largest achievement gaps
+#' globally between students from different socioeconomic backgrounds. The
+#' performance differences between the bottom 25% and top 25% of students
+#' by ESCS (Economic, Social and Cultural Status) range dramatically from
+#' 41 points to 128 points, with most countries showing gaps between 80-120
+#' points.
+#' 
+#' **Economic Resources vs. Educational Equity:**
+#' 
+#' Paradoxically, despite having the greatest economic resources,
+#' high-income countries often struggle more with educational equity than
+#' their lower-income counterparts. This suggests that wealth alone does
+#' not guarantee equitable educational outcomes and may, in some cases,
+#' exacerbate existing inequalities.
+#' 
+#' **Country-Specific Performance Analysis**
+#' 
+#' **Highest Performing Systems:**
+#' 
+#' **Singapore** leads in absolute performance with top 25% ESCS students
+#' scoring 612 points, though maintaining a substantial 110-point gap.
+#' **Liechtenstein** (2003 data) shows exceptional performance for
+#' advantaged students (590 points) with a concerning 121-point gap.
+#' **Taiwan** demonstrates strong performance with top students at 586
+#' points and a moderate 104-point gap. **Republic of Korea** achieves high
+#' performance (570 points for top 25%) with a relatively manageable
+#' 91-point gap.
+#' 
+#' **Most Equitable High-Income Systems:**
+#' 
+#' **Macao** displays the smallest achievement gap at just 41 points while
+#' maintaining high absolute performance (515-556 points), representing an
+#' exceptional model of high achievement with equity. **Saudi Arabia**
+#' shows strong equity with a 48-point gap, though at lower absolute
+#' performance levels (368-416 points). **Hong Kong** demonstrates
+#' excellent equity with only a 52-point gap while achieving very high
+#' performance (496-548 points). **United Arab Emirates** maintains a
+#' moderate 67-point gap with reasonable performance levels.
+#' 
+#' **Largest Achievement Gaps:**
+#' 
+#' **Slovakia** exhibits the widest gap at 128 points (392-520 points),
+#' indicating severe inequality despite moderate performance levels.
+#' **Romania** shows a 126-point gap, combining moderate performance with
+#' significant inequality. **Hungary** demonstrates a 125-point gap
+#' (418-542 points), suggesting deeply embedded educational stratification.
+#' **Israel** maintains a 123-point gap, indicating substantial inequities
+#' despite strong top-performer achievement.
+#' 
+#' **Regional and System-Type Patterns**
+#' 
+#' **East Asian Excellence with Variation:**
+#' 
+#' East Asian systems show remarkable diversity: **Macao** and **Hong
+#' Kong** achieve both high performance and equity, while **Taiwan\*
+#' maintains high performance with moderate equity.** Japan\*\*
+#' demonstrates strong performance (495-569 points) with a reasonable
+#' 74-point gap. **Republic of Korea** balances high achievement with
+#' relatively manageable inequality.
+#' 
+#' **European Stratification:**
+#' 
+#' Many European countries, particularly in Central and Eastern Europe
+#' (**Slovakia**, **Romania**, **Hungary**), show concerning levels of
+#' educational inequality. Western European nations like **Germany**
+#' (114-point gap) and **France** (117-point gap) also struggle with
+#' significant achievement gaps. Nordic countries show good results: While
+#' **Sweden** shows larger disparities (107-point gap), the other Nordic
+#' countries such as **Finland**, **Normay**, **Iceland** and **Denmark**
+#' maintain moderate equity (87-80 gap) and above average perfomance of the
+#' high income countries except for Iceland.
+#' 
+#' **Anglo-Saxon Countries:**
+#' 
+#' **Australia** (98-point gap), **New Zealand** (101-point gap), and
+#' **Canada** (75-point gap) demonstrate relatively moderate inequality
+#' levels. **United States** shows a 103-point gap, indicating persistent
+#' educational stratification. **United Kingdom** maintains an 86-point gap
+#' with strong absolute performance.
+#' 
+#' **Temporal Evolution Patterns**
+#' 
+#' **Recent Performance Decline (2018-2022):**
+#' 
+#' A concerning trend emerges across many high-income countries showing
+#' declining performance between 2018 and 2022 for both socioeconomic
+#' groups. This decline affects both advantaged and disadvantaged students,
+#' suggesting systemic challenges rather than equity-specific issues. The
+#' COVID-19 pandemic period coincides with this decline, potentially
+#' indicating disrupted learning processes and educational delivery
+#' systems. Countries that previously showed strong performance
+#' trajectories have experienced notable setbacks, raising questions about
+#' the resilience of high-income educational systems.
+#' 
+#' **Persistent Inequality:**
+#' 
+#' Many high-income countries show remarkable stability in their
+#' achievement gaps over time, suggesting entrenched systemic inequalities.
+#' Countries like **Switzerland**, **Hungary**, **Germany**, **France**,
+#' and **Belgium** maintain consistently large gaps across measurement
+#' periods
+#' 
+#' **Performance Volatility:**
+#' 
+#' Some countries show fluctuating patterns, indicating that educational
+#' equity can be influenced by policy changes and economic conditions. The
+#' consistency of gaps in many countries suggests that structural factors
+#' may be more influential than cyclical policy changes.
+#' 
+#' **System Resilience Concerns:**
+#' 
+#' The widespread 2018-2022 decline raises questions about the resilience
+#' and adaptability of high-income educational systems. Some countries show
+#' greater volatility in their performance trajectories, while others
+#' maintain more stable (though declining) patterns. The consistency of
+#' achievement gaps even during periods of overall decline suggests that
+#' structural inequalities are deeply embedded in these systems.
+#' 
+#' **Comparative Analysis**
+#' 
+#' **Performance Ranges:**
+#' 
+#' **Top 25% ESCS students:** range from 416 points (Saudi Arabia) to 612
+#' points (Singapore), with most countries between 520-570 points **Bottom
+#' 25% ESCS students:** range from 340 points (Panama) to 515 points
+#' (Macao), with most countries between 400-470 points **Achievement
+#' gaps:** range from 41 points (Macao) to 128 points (Slovakia), with a
+#' median gap of approximately 92 points
+#' 
+#' **High-Income Country Average Performance:**
+#' 
+#' The high-income group demonstrates higher absolute performance than
+#' other income groups but also larger average achievement gaps, confirming
+#' the equity-excellence tension in wealthy nations.
+#' 
+#' **Critical Insights and Policy Implications**
+#' 
+#' **The Equity Paradox:** High-income countries face a fundamental
+#' challenge—their economic advantages do not automatically translate to
+#' educational equity. In fact, some of the largest achievement gaps
+#' globally are found in the wealthiest nations.
+#' 
+#' **Successful Equity Models:** Macao, Hong Kong, and Japan demonstrate
+#' that high-income status can support both strong performance and
+#' reasonable equity, providing valuable models for policy learning.
+#' 
+#' **Resource vs. Structure:** The variation in outcomes among high-income
+#' countries suggests that how educational systems are structured and how
+#' resources are distributed may be more critical than absolute resource
+#' levels.
+#' 
+#' **Policy Intervention Potential:** The existence of high-performing,
+#' equitable systems within the high-income group proves that wealth-based
+#' educational stratification is not inevitable, indicating that targeted
+#' policy interventions can address inequality while maintaining
+#' excellence.
+#' 
+#' **Long-term Sustainability Concerns:** The persistence of large
+#' achievement gaps in many wealthy nations raises questions about social
+#' cohesion and the long-term sustainability of educational advantages,
+#' particularly in increasingly diverse societies.
+#' 
+#' ### Educational investment and educational outcomes for Lower-middle Income
+#' 
+#' This analysis employs a scatter plot design to examine the relationship
+#' between **educational investment** (measured as education spending as a
+#' percentage of GDP from UNESCO) and **educational outcomes** (weighted
+#' average mean PISA scores) across lower-middle income countries in 2022.
+#' The methodology includes several important considerations:
+#' 
+#' **Measurement Approach:** The use of education spending as a percentage
+#' of GDP provides a standardized metric that accounts for economic scale
+#' differences between countries, making cross-national comparisons more
+#' meaningful than absolute spending figures. The weighted average mean
+#' PISA score offers a comprehensive measure of educational achievement
+#' across multiple domains.
+#' 
+#' **Sample Selection:** Focusing exclusively on lower-middle income
+#' countries creates a controlled comparison group, reducing the
+#' confounding effects of vastly different economic development levels that
+#' might obscure the spending-achievement relationship.
+#' 
+## ----PISA-data-exploration-correlation-percentage-gdp-education-pisa-lower-middle-income, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# =====================
+# 1. Prepare Education Expenditure Data (latest available up to 2022)
+# =====================
+edu_exp_latest <- expenditure %>%
+  filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup() %>%
+  select(country, expenditure_year = year, percentage_education_on_gdp)
+
+# =====================
+# 2. Calculate Weighted Average Mean Score by Country-Year
+# =====================
+mean_scores <- student %>%
+  filter(
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    !is.na(world_bank_income_group),
+    world_bank_income_group == "Lower-middle income" # change as needed
+  ) %>%
+  group_by(country, year) %>%
+  summarise(
+    weighted_avg_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 3. Merge Scores with Expenditure Data (latest available year)
+# =====================
+# Get the latest available PISA score per country (up to 2022)
+mean_scores_latest <- mean_scores %>%
+  filter(year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup()
+
+# Merge the two datasets
+scores_exp <- mean_scores_latest %>%
+  left_join(edu_exp_latest, by = "country") %>%
+  filter(!is.na(percentage_education_on_gdp))
+
+# Add country names for better labels
+scores_exp <- scores_exp %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(country_name = ifelse(is.na(country_name), country, country_name))
+
+# =====================
+# 4. Plot: % Education Expenditure vs Weighted Average Mean Score
+# =====================
+
+ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
+  geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
+  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  labs(
+    title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(Lower-middle Income Countries, latest year up to 2022)",
+    x = "Education Spending (% of GDP) (latest available year up to 2022)",
+    y = "Weighted Average Mean Score in PISA in 2022"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+#' 
+#' The correlation analysis reveals a **weak positive relationship between
+#' education spending and PISA performance among lower-middle income
+#' countries**, with several notable patterns and outliers.
+#' 
+#' **Limited Correlation Strength:** The relatively flat trend line and
+#' wide confidence interval indicate that education spending as a
+#' percentage of GDP explains only a modest portion of the variation in
+#' educational achievement. This suggests that other factors beyond
+#' financial investment play crucial roles in determining educational
+#' outcomes.
+#' 
+#' **Exceptional Efficiency Cases:** **Vietnam** emerges as the most
+#' remarkable example, achieving the highest PISA scores (468) with one of
+#' the lowest spending rates (2.89% of GDP). This exceptional
+#' performance-to-investment ratio suggests highly efficient resource
+#' utilization and effective educational policies that maximize learning
+#' outcomes per dollar invested.
+#' 
+#' **High Investment, High Performance:** **Ukraine** demonstrates strong
+#' performance (438) with the highest spending level (5.93% of GDP),
+#' representing a different but successful approach that combines
+#' substantial investment with effective implementation.
+#' 
+#' **High Investment, Moderate Returns:** **Tunisia** and **Kyrgystan**
+#' invest a high percentage in GDP (superior to 6%) but have deceiving
+#' results. **Morocco** shows concerning efficiency patterns, spending
+#' 5.91% of GDP—nearly as much as Ukraine—but achieving significantly lower
+#' scores (356). This suggests potential inefficiencies in resource
+#' allocation or educational system effectiveness that warrant
+#' investigation.
+#' 
+#' Low Investment Outliers: **Indonesia** presents the most extreme
+#' efficiency challenge, achieving only moderate scores (369.0) with the
+#' lowest spending rate (0.86% of GDP). While the low investment partly
+#' explains the performance, the efficiency gap with Vietnam is striking.
+#' 
+#' **Investment-Performance Paradoxes:** **Mongolia** (405 points, 4.18%
+#' spending) significantly outperforms countries with similar or higher
+#' investment levels like **Uzbekistan** (352.2 points, 5.23% spending),
+#' highlighting substantial differences in educational system
+#' effectiveness.
+#' 
+#' **Clustering Patterns:** Most countries cluster in the 350-370 score
+#' range despite varying spending levels from 2.9% to 5.9% of GDP,
+#' suggesting potential systemic constraints that limit the impact of
+#' additional financial investment alone.
+#' 
+#' **Policy Implications:** The data strongly suggests that educational
+#' spending efficiency varies dramatically across countries. **Vietnam's**
+#' model deserves particular study, as it demonstrates that strategic
+#' resource deployment can yield world-class results even with modest
+#' investment levels. Countries like **Morocco** and **Uzbekistan** may
+#' need comprehensive educational system reforms before additional funding
+#' can translate into proportional achievement gains.
+#' 
+#' ### Educational investment and educational outcomes for Upper-middle Income
+#' 
+#' This analysis employs a scatter plot design to examine the relationship
+#' between **educational investment** (measured as education spending as a
+#' percentage of GDP from UNESCO) and **educational outcomes** (weighted
+#' average mean PISA scores) across Higher-middle income countries in 2022.
+#' The methodology includes several important considerations:
+#' 
+#' **Measurement Approach:** The use of education spending as a percentage
+#' of GDP provides a standardized metric that accounts for economic scale
+#' differences between countries, making cross-national comparisons more
+#' meaningful than absolute spending figures. The weighted average mean
+#' PISA score offers a comprehensive measure of educational achievement
+#' across multiple domains.
+#' 
+#' **Sample Selection:** Focusing exclusively on Upper-middle income
+#' countries creates a controlled comparison group, reducing the
+#' confounding effects of vastly different economic development levels that
+#' might obscure the spending-achievement relationship.
+#' 
+## ----PISA-data-exploration-correlation-percentage-gdp-education-pisa-upper-middle-income, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# =====================
+# 1. Prepare Education Expenditure Data (latest available up to 2022)
+# =====================
+edu_exp_latest <- expenditure %>%
+  filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup() %>%
+  select(country, expenditure_year = year, percentage_education_on_gdp)
+
+# =====================
+# 2. Calculate Weighted Average Mean Score by Country-Year
+# =====================
+mean_scores <- student %>%
+  filter(
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    !is.na(world_bank_income_group),
+    world_bank_income_group == "Upper-middle income" 
+  ) %>%
+  group_by(country, year) %>%
+  summarise(
+    weighted_avg_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 3. Merge Scores with Expenditure Data (latest available year)
+# =====================
+# Get the latest available PISA score per country (up to 2022)
+mean_scores_latest <- mean_scores %>%
+  filter(year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup()
+
+# Merge the two datasets
+scores_exp <- mean_scores_latest %>%
+  left_join(edu_exp_latest, by = "country") %>%
+  filter(!is.na(percentage_education_on_gdp))
+
+# Add country names for better labels
+scores_exp <- scores_exp %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(country_name = ifelse(is.na(country_name), country, country_name))
+
+# =====================
+# 4. Plot: % Education Expenditure vs Weighted Average Mean Score
+# =====================
+
+ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
+  geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
+  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  labs(
+    title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(Upper-middle Income Countries, latest year up to 2022)",
+    x = "Education Spending (% of GDP) (latest available year up to 2022)",
+    y = "Weighted Average Mean Score in PISA in 2022"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+#' 
+#' The correlation analysis reveals a **weak positive relationship**
+#' between education spending and PISA performance among upper-middle
+#' income countries, with notable patterns of efficiency and outlier
+#' performance:
+#' 
+#' **Limited Overall Correlation:** The relatively flat trend line and wide
+#' confidence interval indicate that education spending explains only a
+#' modest portion of achievement variation. This suggests that factors
+#' beyond financial investment—such as system efficiency, teacher quality,
+#' and policy implementation—play crucial roles in determining outcomes.
+#' 
+#' **Exceptional Efficiency Leaders:** **Turks and Caicos Islands** (462
+#' points, 2.61% GDP) and **Serbia** (443 points, 3.24% GDP) emerge as
+#' remarkable efficiency exemplars, achieving the highest PISA scores with
+#' among the lowest spending rates in this group. This suggests highly
+#' effective resource utilization and educational system optimization.
+#' 
+#' **High Investment, Strong Returns:** **The Republic of Moldova**,
+#' **Venezuela** , **Costa Rica** demonstrate that substantial investment
+#' (6.11% GDP) can yield good results , representing the highest spending
+#' level in the sample with correspondingly solid performance.
+#' 
+#' **Investment-Performance Disconnects:** **Jamaica** and **Brazil**
+#' present concerning efficiency patterns, spending more than 5.35% of
+#' GDP—among the highest rates—while achieving moderate scores (below 400
+#' points). This suggests potential resource allocation inefficiencies or
+#' systemic challenges that prevent investment from translating into
+#' proportional achievement gains.
+#' 
+#' **Moderate Efficiency Cases:** Countries like **Kazakhstan** (412
+#' points, 4.46% GDP) and **Malaysia** (405 points, 3.50% GDP) show
+#' reasonable but not exceptional efficiency, achieving solid performance
+#' with moderate investment levels.
+#' 
+#' Underperforming Despite Resources: Several countries including
+#' **Dominican Republic** (351 points, 3.94% GDP), **Jordan** (360 points,
+#' 3.16% GDP), and **Paraguay** (361 points, 3.40% GDP) show concerning
+#' patterns where moderate-to-substantial investments yield relatively low
+#' achievement outcomes.
+#' 
+#' **Performance Clustering:** Most countries cluster in the 350-410 score
+#' range despite spending variations from 2.6% to 6.1% of GDP, suggesting
+#' potential systemic constraints or ceiling effects that limit the impact
+#' of additional financial investment alone.
+#' 
+#' **Policy Implications:**
+#' 
+#' The data demonstrates dramatic efficiency variations across upper-middle
+#' income countries. **Turks and Caicos Islands'** and **Serbia's** models
+#' merit detailed study as they achieve exceptional results with relatively
+#' modest investments.
+#' 
+#' Countries like **Jamaica** and **Dominican Republic** may require
+#' comprehensive educational system reforms and improved resource
+#' allocation strategies before additional funding can generate
+#' proportional achievement improvements. The weak overall correlation
+#' emphasizes that strategic implementation and system effectiveness matter
+#' more than spending levels alone.
+#' 
+#' ### Educational investment and educational outcomes for High Income
+#' 
+#' This analysis employs a scatter plot design to examine the relationship
+#' between **educational investment** (measured as education spending as a
+#' percentage of GDP from UNESCO) and **educational outcomes** (weighted
+#' average mean PISA scores) across High income countries in 2022. The
+#' methodology includes several important considerations:
+#' 
+#' **Measurement Approach:** The use of education spending as a percentage
+#' of GDP provides a standardized metric that accounts for economic scale
+#' differences between countries, making cross-national comparisons more
+#' meaningful than absolute spending figures. The weighted average mean
+#' PISA score offers a comprehensive measure of educational achievement
+#' across multiple domains.
+#' 
+#' **Sample Selection:** Focusing exclusively on High income countries
+#' creates a controlled comparison group, reducing the confounding effects
+#' of vastly different economic development levels that might obscure the
+#' spending-achievement relationship.
+#' 
+## ----PISA-data-exploration-correlation-percentage-gdp-education-pisa-high-income, fig.width=8, fig.height=12, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# =====================
+# 1. Prepare Education Expenditure Data (latest available up to 2022)
+# =====================
+edu_exp_latest <- expenditure %>%
+  filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup() %>%
+  select(country, expenditure_year = year, percentage_education_on_gdp)
+
+# =====================
+# 2. Calculate Weighted Average Mean Score by Country-Year
+# =====================
+mean_scores <- student %>%
+  filter(
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    !is.na(world_bank_income_group),
+    world_bank_income_group == "High income" # change as needed
+  ) %>%
+  group_by(country, year) %>%
+  summarise(
+    weighted_avg_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 3. Merge Scores with Expenditure Data (latest available year)
+# =====================
+# Get the latest available PISA score per country (up to 2022)
+mean_scores_latest <- mean_scores %>%
+  filter(year <= 2022) %>%
+  group_by(country) %>%
+  filter(year == max(year)) %>%
+  ungroup()
+
+# Merge the two datasets
+scores_exp <- mean_scores_latest %>%
+  left_join(edu_exp_latest, by = "country") %>%
+  filter(!is.na(percentage_education_on_gdp))
+
+# Add country names for better labels
+scores_exp <- scores_exp %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(country_name = ifelse(is.na(country_name), country, country_name))
+
+# =====================
+# 4. Plot: % Education Expenditure vs Weighted Average Mean Score
+# =====================
+
+ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
+  geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.5, color = "#F577e0", linetype = "dashed") +
+  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  labs(
+    title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(High Income Countries, latest year up to 2022)",
+    x = "Education Spending (% of GDP) (latest available year up to 2022)",
+    y = "Weighted Average Mean Score in PISA in 2022"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+#' 
+#' This analysis examines the relationship between education expenditure
+#' (as % of GDP) and PISA performance across **45 high-income countries**,
+#' revealing a **complex and counterintuitive pattern** that challenges
+#' conventional assumptions about education investment and outcomes.
+#' 
+#' **Weak Correlation Between Spending and Performance:**
+#' 
+#' The scatter plot reveals a notably weak positive correlation between
+#' education spending and PISA scores, suggesting that simply increasing
+#' education budgets does not guarantee improved student outcomes. The wide
+#' confidence interval (gray shaded area) indicates substantial variation
+#' around any potential trend line.
+#' 
+#' **High-Performing Outliers with Low Spending:**
+#' 
+#' Several countries achieve exceptional PISA results with relatively
+#' modest education spending:
+#' 
+#' **Singapore** (561 PISA score, 2.5% GDP): Highest performer globally
+#' with lowest spending rate **Japan** (533 PISA score, 3.2% GDP):
+#' Second-highest performer with below-average spending **Hong Kong** (521
+#' PISA score, 3.7% GDP): Third-highest performer with low-moderate
+#' spending **Macao** (535 PISA score, 6.2% GDP): High performer with
+#' moderate-high spending
+#' 
+#' These cases suggest that educational efficiency and system design may
+#' matter more than raw investment levels.
+#' 
+#' **High-Spending Underperformers:**
+#' 
+#' Conversely, several countries invest heavily in education but achieve
+#' mediocre PISA results:
+#' 
+#' **Iceland** (448 PISA score, 7.1% GDP): Highest spender with
+#' below-average performance **Belgium** (489 PISA score, 6.4% GDP): High
+#' spender with moderate performance **Sweden** (490 PISA score, 7.6% GDP):
+#' High spender with good but not exceptional performance
+#' 
+#' This pattern indicates potential inefficiencies in resource allocation
+#' or systemic challenges that money alone cannot resolve.
+#' 
+#' **The "Efficiency Frontier" Concept:**
+#' 
+#' Countries like **Singapore**, **Japan**, and **South Korea** appear to
+#' operate on an "efficiency frontier," maximizing educational outcomes per
+#' unit of investment. This suggests these systems have optimized factors
+#' such as:
+#' 
+#' -   Teacher quality and training
+#' 
+#' -   Curriculum design and implementation
+#' 
+#' -   Educational technology integration
+#' 
+#' -   Student motivation and cultural attitudes toward learning
+#' 
+#' **Regional and Cultural Patterns:**
+#' 
+#' **East Asian Excellence:**
+#' 
+#' The top-performing countries (**Singapore**, **Macao**, **Japan**,
+#' **South Korea**, **Hong Kong**) are predominantly East Asian, suggesting
+#' cultural, pedagogical, or systemic factors beyond spending levels.
+#' 
+#' **European Variation:**
+#' 
+#' European countries show wide variation in both spending (2.6% to 7.6%
+#' GDP) and performance (428 to 525 PISA points), indicating diverse
+#' approaches and effectiveness across the continent.
+#' 
+#' **Policy Implications:**
+#' 
+#' **Beyond Budgetary Solutions** The weak spending-performance correlation
+#' suggests that education policy should focus on:
+#' 
+#' -   System efficiency rather than just increased funding
+#' 
+#' -   Teacher quality improvements through better recruitment, training,
+#'     and retention
+#' 
+#' -   Curriculum optimization and pedagogical innovation
+#' 
+#' -   Student engagement and motivation strategies
+#' 
+#' **Learning from High-Efficiency Systems:**
+#' 
+#' Policymakers should study the practices of high-performing, low-spending
+#' countries to identify transferable strategies:
+#' 
+#' -   Singapore's teacher development programs
+#' 
+#' -   Japan's classroom management techniques
+#' 
+#' -   South Korea's integration of technology and traditional pedagogy
+#' 
+#' **Diminishing Returns Consideration:**
+#' 
+#' Countries already spending above 5-6% of GDP on education may face
+#' diminishing returns and should focus on optimization rather than
+#' expansion of budgets.
+#' 
+#' ### Economic Prosperity vs Educational Achievement
+#' 
+#' This analysis examines the relationship between economic prosperity (GDP
+#' per capita PPP) and educational achievement (PISA 2022 scores) across 77
+#' participating countries and territories.
+#' 
+#' The data reveals a moderate positive correlation with notable exceptions
+#' that challenge assumptions about the relationship between national
+#' wealth and educational performance.
+#' 
+## ----PISA-data-exploration-economic-prosperity-pisa-score, fig.width=8, fig.height=10,message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# =====================
+# 1. Prepare the Weighted Average Mean Score for 2022
+# =====================
+mean_scores_2022 <- student %>%
+  filter(!is.na(avg_score), !is.na(stu_wgt), year == 2022) %>%
+  group_by(country) %>%
+  summarise(
+    weighted_avg_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 2. Prepare GDP per PPP Data
+# =====================
+gdp_perppp <- gdp_perppp %>%
+  rename(GDP_per_PPP_2022 = GDP_per_PPP_2022) %>%
+  mutate(country = toupper(trimws(as.character(country))))
+
+# =====================
+# 3. Merge the two dataframes
+# =====================
+plot_data <- mean_scores_2022 %>%
+  left_join(gdp_perppp %>% select(country, GDP_per_PPP_2022), by = "country") %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(country_name = ifelse(is.na(country_name), country, country_name))
+
+# Filter out missing GDP values if needed
+plot_data <- plot_data %>% filter(!is.na(GDP_per_PPP_2022))
+
+# =====================
+# 4. Plot: Mean Score vs. GDP per PPP (Log scale)
+# =====================
+
+ggplot(plot_data, aes(x = GDP_per_PPP_2022, y = weighted_avg_score, label = country_name)) +
+  geom_point(size = 2.5, color = "#23395d", alpha = 0.85) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
+  geom_text_repel(size = 2.8, max.overlaps = 12) +
+  scale_x_log10(labels = scales::comma_format(accuracy = 1)) +  # Log scale, nice formatting
+  labs(
+    title = "Weighted Average Mean Score (2022) vs GDP per Capita (PPP, 2022)",
+    x = "GDP per Capita (PPP, 2022, log scale)",
+    y = "Weighted Average Mean Score (2022)"
+  ) +
+  theme_minimal(base_size = 13)
+
+#' 
+#' **Moderate Positive Correlation with Significant Outliers**
+#' 
+#' The logarithmic scatter plot reveals a moderate positive correlation
+#' between GDP per capita (PPP) and PISA performance, with the pink trend
+#' line showing that economic prosperity generally associates with better
+#' educational outcomes. However, the wide confidence interval indicates
+#' substantial variation, with numerous countries significantly over- or
+#' under-performing relative to their economic status.
+#' 
+#' **Exceptional High-Achievers Across Economic Spectrum**
+#' 
+#' Several countries demonstrate outstanding educational performance
+#' regardless of their economic positioning:
+#' 
+#' **High-Income High-Achievers**:
+#' 
+#' **Singapore** (561 PISA, \$132,469 GDP): Global leader in both metrics
+#' **Ireland** (505 PISA, \$125,625 GDP): Strong performance with highest
+#' GDP per capita **Switzerland** (500 PISA, \$82,203 GDP): Consistent high
+#' performance
+#' 
+#' **Middle-Income Educational Champions**:
+#' 
+#' **Estonia** (516 PISA, \$43,690 GDP): Exceptional performance relative
+#' to economic status **Japan** (533 PISA, \$44,937 GDP): Second-highest
+#' PISA score with moderate GDP **South Korea** (524 PISA, \$49,778 GDP):
+#' Third-highest performance **Macao** (535 PISA, \$60,090 GDP): Highest
+#' performer after Singapore
+#' 
+#' **Economic Prosperity Without Educational Excellence**
+#' 
+#' Several wealthy nations underperform relative to their economic
+#' capacity:
+#' 
+#' **Qatar** (424 PISA, \$114,740 GDP): High wealth, moderate educational
+#' performance **Brunei** (440 PISA, \$76,357 GDP): Significant
+#' underperformance given economic resources **UAE** (430 PISA, \$68,868
+#' GDP): Below-average education despite high GDP **Norway** (478 PISA,
+#' \$90,839 GDP): Surprisingly modest performance given wealth
+#' 
+#' **Remarkable Low-Income Achievers**
+#' 
+#' Some countries with limited economic resources achieve impressive
+#' educational outcomes:
+#' 
+#' **Vietnam** (468 PISA, \$12,930 GDP): Outstanding performance given
+#' economic constraints **Albania** (368 PISA, \$17,113 GDP): Reasonable
+#' performance for income level **Ukraine** (438 PISA, \$13,787 GDP):
+#' Strong performance despite economic challenges
+#' 
+#' **Regional and Development Patterns**
+#' 
+#' **East Asian Excellence Confirmed:** The top educational performers
+#' (**Singapore**, **Macao**, **Japan**, **South Korea**, **Hong Kong**)
+#' reinforce East Asian educational superiority across different income
+#' levels.
+#' 
+#' **Resource-Rich Underperformers:** Several oil-rich nations (**Qatar**,
+#' **UAE**, **Saudi Arabia**, **Brunei**) demonstrate that natural resource
+#' wealth doesn't automatically translate to educational excellence.
+#' 
+#' **European Consistency:** Most European nations cluster around the trend
+#' line, showing relatively predictable relationships between wealth and
+#' educational performance.
+#' 
+#' **Latin American Challenges:** Most Latin American countries fall below
+#' the trend line, indicating systematic educational challenges despite
+#' varying economic conditions.
+#' 
+#' **Policy Implications**
+#' 
+#' 1.  **Economic Development Alone Insufficient for Educational
+#'     Excellence**
+#' 
+#' The moderate correlation demonstrates that while economic prosperity
+#' provides important resources for education, it does not guarantee
+#' superior outcomes. Countries must strategically invest in educational
+#' systems, teacher quality, and pedagogical approaches.
+#' 
+#' 2.  **Learning from Cross-Income Success Models**
+#' 
+#' **High-Efficiency Developing Nations:** Countries like Vietnam
+#' demonstrate that effective educational systems can be built without
+#' extensive resources through:
+#' 
+#' -   Focused investment in teacher training and development
+#' 
+#' -   Emphasis on fundamental skills and rigorous curricula
+#' 
+#' -   Strong cultural emphasis on educational achievement
+#' 
+#' -   Efficient resource allocation
+#' 
+#' **Resource-Rich Optimization:** Wealthy underperformers (**Qatar**,
+#' **UAE**, **Brunei**) should examine why their economic advantages
+#' haven't translated to educational success, potentially focusing on:
+#' 
+#' -   Educational system design and governance
+#' 
+#' -   Teacher recruitment and retention strategies
+#' 
+#' -   Student motivation and engagement programs
+#' 
+#' -   Long-term educational planning beyond infrastructure investment
+#' 
+#' 3.  **The "Development Trap":** Consideration Some middle-income
+#'     countries may face a "development trap" where economic growth
+#'     doesn't automatically improve educational outcomes, requiring
+#'     targeted educational reforms alongside economic development.
+#' 4.  **Regional Learning Networks:** The clustering of high-performing
+#'     East Asian nations suggests value in regional educational
+#'     cooperation and knowledge sharing, while underperforming regions
+#'     could benefit from systematic study of successful educational
+#'     models.
+#' 
+#' **Limitations and Considerations:**
+#' 
+#' **Causality Questions:** The correlation doesn't establish whether
+#' economic prosperity drives educational achievement or vice versa.
+#' 
+#' **Cultural Factors:** PISA performance may reflect cultural attitudes
+#' toward education and testing that aren't directly related to economic
+#' development.
+#' 
+#' **Historical Context:** Some countries may be experiencing educational
+#' improvements or declines not captured in cross-sectional data.
+#' 
+#' **System Maturity:** Educational systems require time to develop, and
+#' recent economic growth may not yet have impacted educational outcomes.
+#' 
+#' **Natural Resource Dependence:** Resource-rich economies may face
+#' specific challenges in developing human capital
+#' 
+#' This analysis reveals that while economic prosperity and educational
+#' achievement are positively correlated, the relationship is far from
+#' deterministic. The most successful educational systems appear to
+#' optimize factors beyond pure economic resources, including cultural
+#' attitudes, pedagogical approaches, and system design. Countries at all
+#' income levels can achieve educational excellence through strategic focus
+#' on educational quality rather than relying solely on economic
+#' development to drive educational improvement.
+#' 
+#' ### Student-Teacher Ratio vs Educational Achievement
+#' 
+#' This analysis examines the relationship between student-teacher ratios
+#' and educational achievement (PISA 2022 scores) across 74 participating
+#' countries and territories.
+#' 
+#' The data reveals a strong negative correlation, demonstrating that
+#' smaller class sizes generally associate with better educational
+#' outcomes, though notable exceptions highlight the complexity of
+#' educational effectiveness.
+#' 
+## ----PISA-data-exploration-student-teacher-ratio, fig.width=8, fig.height=10, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# =====================
+# 1. Prepare the Weighted Average Mean Score for 2022
+# =====================
+mean_scores_2022 <- student %>%
+  filter(!is.na(avg_score), !is.na(stu_wgt), year == 2022) %>%
+  group_by(country) %>%
+  summarise(
+    weighted_avg_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 2. Calculate the Average Student-Teacher Ratio (stratio) per Country in 2022
+# =====================
+stratio_2022 <- school %>%
+  filter(!is.na(stratio), !is.na(country), year == 2022) %>%
+  group_by(country) %>%
+  summarise(
+    avg_stratio = mean(stratio, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# =====================
+# 3. Merge the Two DataFrames
+# =====================
+plot_data <- mean_scores_2022 %>%
+  left_join(stratio_2022, by = "country") %>%
+  left_join(region_income %>% select(country, country_name), by = "country") %>%
+  mutate(country_name = ifelse(is.na(country_name), country, country_name))
+
+plot_data <- plot_data %>% filter(!is.na(avg_stratio))
+
+# =====================
+# 4. Plot: Weighted Mean Score vs. Student-Teacher Ratio
+# =====================
+
+ggplot(plot_data, aes(x = avg_stratio, y = weighted_avg_score, label = country_name)) +
+  geom_point(size = 2.5, color = "#23395d", alpha = 0.85) +
+  geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
+  geom_text_repel(size = 2.8, max.overlaps = 12) +
+  labs(
+    title = "Weighted Average Mean Score (2022) vs Student-Teacher Ratio (2022)",
+    x = "Student-Teacher Ratio (2022)",
+    y = "Weighted Average Mean Score (2022)"
+  ) +
+  theme_minimal(base_size = 13)
+
+
+#
+
+#' 
+#' **1. Strong Negative Correlation with Clear Trend**
+#' 
+#' The scatter plot shows a pronounced negative correlation between
+#' student-teacher ratios and PISA performance, with the pink trend line
+#' clearly indicating that countries with lower student-teacher ratios
+#' (smaller class sizes) tend to achieve higher PISA scores. The confidence
+#' interval suggests this relationship is statistically robust across most
+#' of the range.
+#' 
+#' **2. Low Student-Teacher Ratio Champions**
+#' 
+#' Countries achieving exceptional educational performance with favorable
+#' student-teacher ratios:
+#' 
+#' **Ultra-Low Ratios (5-8 students per teacher):**
+#' 
+#' **Italy** (479 PISA, 6.7 ratio): Strong performance with excellent
+#' teacher availability **Malta** (462 PISA, 6.7 ratio): Good performance
+#' with very low ratios **Belgium** (489 PISA, 7.2 ratio): High performance
+#' with favorable staffing **Greece** (437 PISA, 7.4 ratio): Moderate
+#' performance despite excellent ratios
+#' 
+#' **Optimal Range (8-10 students per teacher):**
+#' 
+#' **Switzerland** (500 PISA, 8.1 ratio): Excellent performance with
+#' optimal staffing **Slovenia** (485 PISA, 8.3 ratio): Strong performance
+#' **Poland** (494 PISA, 8.8 ratio): High achievement with good ratios
+#' **Estonia** (516 PISA, 9.6 ratio): Outstanding performance
+#' 
+#' **3. High-Performing Systems with Moderate Ratios**
+#' 
+#' Several top-performing countries achieve excellence despite moderate
+#' student-teacher ratios:
+#' 
+#' **Singapore** (561 PISA, 11.4 ratio): Global leader with moderate
+#' staffing levels **Macao** (535 PISA, 10.4 ratio): Second-highest
+#' performer **Taiwan** (534 PISA, 11.3 ratio): Exceptional achievement
+#' **Japan** (533 PISA, 10.5 ratio): Top-tier performance **South Korea**
+#' (524 PISA, 10.4 ratio): Elite educational system **Hong Kong** (521
+#' PISA, 11.1 ratio): Outstanding results
+#' 
+#' **4. High Ratio Underperformers**
+#' 
+#' Countries with high student-teacher ratios facing educational
+#' challenges: Extreme Ratios (25+ students per teacher):
+#' 
+#' **Philippines** (352 PISA, 28.6 ratio): Severe staffing constraints
+#' **Mexico** (407 PISA, 25.9 ratio): Large classes limiting effectiveness
+#' **Cambodia** (337 PISA, 24.7 ratio): Resource constraints evident
+#' 
+#' High Ratios (20-25 students per teacher):
+#' 
+#' **Morocco** (356 PISA, 23.4 ratio): Limited teacher availability
+#' **Colombia** (403 PISA, 22.9 ratio): Staffing challenges **Dominican
+#' Republic** (351 PISA, 23.4 ratio): Resource limitations
+#' 
+#' 5.  Notable Exceptions and Outliers
+#' 
+#' **Vietnam Anomaly** (468 PISA, 19.3 ratio): Remarkable achievement
+#' despite high student-teacher ratios, suggesting exceptional teacher
+#' quality or educational system efficiency. **USA Performance** (490 PISA,
+#' 16.4 ratio): Good performance despite relatively high ratios for a
+#' developed nation. **Resource-Rich Underperformers:** Countries like UAE
+#' (430 PISA, 13.9 ratio) and Qatar (424 PISA, 11.4 ratio) show that
+#' moderate ratios don't guarantee success without system optimization.
+#' 
+#' **Regional and Developmental Patterns**
+#' 
+#' **European Excellence in Staffing**
+#' 
+#' Most European countries cluster in the favorable 7-12 student-teacher
+#' ratio range, with generally strong PISA performance, suggesting
+#' systematic investment in teacher availability.
+#' 
+#' **East Asian Efficiency**
+#' 
+#' Top East Asian performers (Singapore, Macao, Taiwan, Japan, South Korea,
+#' Hong Kong) achieve exceptional results with moderate ratios (10-11.5),
+#' indicating highly efficient educational systems that maximize teacher
+#' effectiveness.
+#' 
+#' **Latin American Challenges**
+#' 
+#' Most Latin American countries show high student-teacher ratios (15-26)
+#' with correspondingly lower PISA scores, indicating systematic
+#' under-investment in teaching staff.
+#' 
+#' \*\*Developing Nation Constraints\* Many lower-income countries face
+#' severe staffing constraints (ratios above 20), directly correlating with
+#' educational performance challenges.
+#' 
+#' **Policy Implications**
+#' 
+#' **1. Teacher Availability as Foundation**
+#' 
+#' The strong correlation suggests that ensuring adequate teacher
+#' availability is fundamental to educational success. Countries should
+#' prioritize:
+#' 
+#' -   Teacher recruitment and retention programs
+#' 
+#' -   Competitive compensation packages to attract quality educators
+#' 
+#' -   Investment in teacher training infrastructure
+#' 
+#' -   Long-term workforce planning for educational staffing
+#' 
+#' **2. The "Efficiency Threshold" Concept**
+#' 
+#' East Asian examples suggest there may be an "efficiency threshold"
+#' around 10-12 students per teacher where exceptional systems can achieve
+#' outstanding results through:
+#' 
+#' -   Superior teacher quality and training
+#' 
+#' -   Optimized pedagogical approaches
+#' 
+#' -   Strong educational culture and student motivation
+#' 
+#' -   Effective classroom management techniques
+#' 
+#' **3. Beyond Simple Ratios**
+#' 
+#' Vietnam's exceptional performance despite high ratios demonstrates that
+#' student-teacher ratios, while important, are not deterministic. Other
+#' critical factors include:
+#' 
+#' -   Teacher quality and preparation
+#' 
+#' -   Curriculum design and implementation
+#' 
+#' -   Educational leadership and system management
+#' 
+#' -   Cultural attitudes toward education
+#' 
+#' **4. Targeted Investment Strategies**
+#' 
+#' **For High-Ratio Countries:** Priority should be systematic teacher
+#' recruitment and training programs to reduce class sizes while
+#' maintaining quality. **For Low-Ratio Countries:** Focus should shift to
+#' teacher quality improvement and pedagogical optimization rather than
+#' further ratio reduction.
+#' 
+#' **Limitations and Considerations**
+#' 
+#' **Causality Direction:** While correlation is strong, the direction of
+#' causality may be complex; better educational systems may both attract
+#' more teachers and produce better outcomes.
+#' 
+#' **Quality vs. Quantity:** Student-teacher ratios don't capture teacher
+#' quality, training, or effectiveness.
+#' 
+#' **System Context:** Different educational approaches may optimize
+#' different ratio ranges.
+#' 
+#' **Resource Allocation:** Some countries may achieve better results by
+#' investing in teacher quality rather than quantity.
+#' 
+#' **Cultural Factors:** Educational effectiveness may depend on cultural
+#' attitudes that influence how class size impacts learning.
+#' 
+#' This analysis demonstrates a strong relationship between student-teacher
+#' ratios and educational achievement, with smaller class sizes generally
+#' correlating with better PISA performance. However, the most successful
+#' educational systems appear to optimize both teacher availability and
+#' teacher effectiveness.
+#' 
+#' While adequate staffing is clearly important, countries like Vietnam and
+#' the East Asian high-performers show that exceptional educational
+#' outcomes are possible through systematic focus on teacher quality,
+#' pedagogical excellence, and educational system optimization, even within
+#' resource constraints. The key lesson is that teacher availability
+#' provides the foundation, but educational excellence requires
+#' comprehensive system design and implementation.
+#' 
+#' ### Public vs Private school performance for Lower Middle Income Countries
+#' 
+#' This analysis examines the performance gap between private and public
+#' schools in lower-middle income countries participating in PISA 2022. The
+#' data reveals significant variation in the public-private achievement
+#' gap, with some countries showing substantial private school advantages
+#' while others demonstrate superior public school performance, challenging
+#' common assumptions about private education superiority in developing
+#' contexts.
+#' 
+## ----PISA-data-exploration-public-vs-private-school-lower-middle-countries, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# 1. Join student and school data to get sector for each student
+student_school <- student %>%
+  left_join(
+    school %>% select(school_id, country, public_private),
+    by = c("school_id", "country") 
+  ) %>%
+  clean_names() # Makes column names snake_case
+
+
+# 2. Filter for valid rows
+student_school <- student_school %>%
+  filter(
+    public_private %in% c("public", "private"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Lower-middle income"
+  )
+
+# 3. Calculate weighted mean score per country and sector
+wm_sector <- student_school %>%
+  group_by(country, public_private, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Reshape and compute difference
+wm_wide <- wm_sector %>%
+  pivot_wider(
+    names_from = public_private,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(public), !is.na(private)) %>% # Only keep countries with both sectors
+  mutate(
+    diff_private_public = private - public
+  )
+
+# 5. Sort by difference and set country order for plotting
+wm_wide <- wm_wide %>%
+  arrange(diff_private_public) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_wide, aes(x = country_name)) +
+  geom_point(aes(y = public, color = "Public"), size = 3, shape = 16) +
+  geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
+  geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by School Type \n (Lower-middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "School Type"
+  ) +
+  scale_color_manual(values = c("Public" = "#23395d", "Private" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+#
+
+#' 
+#' 1.  **Varied Private School Advantage Patterns**
+#' 
+#' The data shows three distinct patterns in public-private school
+#' performance across lower-middle income countries:
+#' 
+#' ***Strong Private School Advantage (40+ point gaps):***
+#' 
+#' **El Salvador** (+63 points): Largest private advantage with private
+#' schools scoring 410 vs public 347 **Cambodia** (+41 points): Significant
+#' private school superiority (373 vs 331) **Philippines** (+41 points):
+#' Notable private advantage (387 vs 346) **Mongolia** (+36 points):
+#' Substantial gap favoring private schools (437 vs 401)
+#' 
+#' ***Moderate Private Advantage (10-25 point gaps):***
+#' 
+#' **Occupied Palestinian Territory** (+20 points): Moderate private school
+#' advantage (369 vs 349) **Vietnam** (+12 points): Small but consistent
+#' private advantage (477 vs 465)
+#' 
+#' ***Public School Superiority (negative gaps):***
+#' 
+#' **Ukraine** (-10 points): Public schools outperform private (442 vs 431)
+#' **Uzbekistan** (-8 points): Public advantage (352 vs 344) **Morocco**
+#' (-2 points): Minimal public advantage (357 vs 355)
+#' 
+#' ***Minimal Difference:***
+#' 
+#' **Indonesia** (+3 points): Virtually no performance gap (372 vs 369)
+#' 
+#' 2.  **Vietnam as Educational Excellence Model**
+#' 
+#' Vietnam stands out as the highest-performing lower-middle income country
+#' with strong results in both sectors:
+#' 
+#' **Overall Excellence:** Significantly outperforming all other countries
+#' in both public (465) and private (477) schools **Sector Balance:** Small
+#' private advantage (12 points) suggests both sectors function
+#' effectively. **System Effectiveness:** Public schools in Vietnam (465)
+#' outperform private schools in most other countries.
+#' 
+#' 3.  **El Salvador's Dual System Challenge**
+#' 
+#' El Salvador presents the most dramatic public-private divide:
+#' 
+#' **Extreme Gap:** 63-point difference represents nearly two years of
+#' learning. **Private Performance:** Private schools achieve respectable
+#' 410 score. **Public Struggles:** Public schools severely underperform at
+#' 347, indicating systemic challenges.
+#' 
+#' 4.  **High-Performing Public Systems**
+#' 
+#' Several countries demonstrate effective public education systems:
+#' 
+#' **Ukraine:** Public schools (442) outperform private schools, suggesting
+#' strong state education investment. **Uzbekistan:** Public system
+#' provides better outcomes than private alternatives. **Morocco:** Minimal
+#' gap indicates relatively balanced system performance.
+#' 
+#' 5.  **System Equity Implications**
+#' 
+#' -   High Private Advantage Countries likely face:
+#' 
+#' -   Significant educational inequality based on family income
+#' 
+#' -   Brain drain from public to private sector teachers
+#' 
+#' -   Under-investment in public education infrastructure
+#' 
+#' -   Social stratification through education access
+#' 
+#' Balanced Systems suggest:
+#' 
+#' -   More equitable educational opportunities
+#' 
+#' -   Effective public education governance
+#' 
+#' -   Better resource distribution across sectors
+#' 
+#' **Regional and Developmental Context**
+#' 
+#' ***Southeast Asian Patterns***
+#' 
+#' **Vietnam:** Demonstrates that lower-middle income countries can achieve
+#' educational excellence **Philippines** and **Cambodia**: Show typical
+#' developing country patterns with significant private advantages
+#' **Indonesia**: Unique balance suggests effective public-private
+#' integration
+#' 
+#' ***Post-Soviet Space***
+#' 
+#' **Ukraine** and **Uzbekistan**: Both show public sector strength,
+#' possibly reflecting Soviet educational legacy Strong state education
+#' systems despite economic constraints
+#' 
+#' ***Latin American Context***
+#' 
+#' **El Salvado**r: Represents common Latin American pattern of significant
+#' public-private gaps Suggests need for targeted public education
+#' investment
+#' 
+#' **Policy Implications**
+#' 
+#' 1.  **Context-Specific Strategies Required**
+#' 
+#' ***For High Private Advantage Countries (El Salvador, Cambodia,
+#' Philippines, Mongolia):***
+#' 
+#' **Public Sector Investment:** Urgent need to improve public school
+#' resources, teacher training, and infrastructure
+#' 
+#' **Teacher Quality Programs:** Focus on recruiting and retaining quality
+#' teachers in public schools
+#' 
+#' **Equity Initiatives:** Policies to reduce educational inequality
+#' between sectors
+#' 
+#' ***For Balanced Systems (Vietnam, Indonesia, Morocco):***
+#' 
+#' **System Optimization:** Continue strengthening both sectors while
+#' maintaining balance **Best Practice Sharing:** These countries can serve
+#' as models for other developing nations
+#' 
+#' ***For Public-Advantage Countries (Ukraine, Uzbekistan):***
+#' 
+#' **System Preservation:** Maintain public sector strengths while
+#' supporting private sector development
+#' 
+#' **Resource Efficiency:** Optimize public education investments to
+#' sustain performance
+#' 
+#' 2.  **Learning from Vietnam's Success**
+#' 
+#' Vietnam's exceptional performance across both sectors suggests:
+#' 
+#' **Teacher Development:** Systematic investment in teacher quality and
+#' training
+#' 
+#' **Curriculum Standards:** Rigorous academic standards applied
+#' consistently
+#' 
+#' **Cultural Factors:** Strong emphasis on educational achievement
+#' 
+#' **System Governance:** Effective oversight of both public and private
+#' sectors
+#' 
+#' 3.  **Addressing Educational Inequality**
+#' 
+#' Countries with large private advantages need:
+#' 
+#' **Targeted Public Investment:** Focus resources on improving public
+#' school quality.
+#' 
+#' **Teacher Mobility Programs:** Initiatives to share expertise between
+#' sectors.
+#' 
+#' **Regulatory Frameworks:** Ensure private schools contribute to overall
+#' system improvement.
+#' 
+#' **Scholarship Programs:** Provide access to quality education regardless
+#' of family income.
+#' 
+#' **Limitations and Considerations**
+#' 
+#' **Sample Size Effects:** Some countries may have small private school
+#' samples affecting reliability.
+#' 
+#' **Selection Bias:** Private school students may come from more
+#' advantaged backgrounds.
+#' 
+#' **Resource Variations:** Private schools may have access to better
+#' resources independent of teaching quality.
+#' 
+#' **Cultural Context:** Different countries may have varying cultural
+#' attitudes toward public vs private education.
+#' 
+#' **System Maturity:** Some private education sectors may be relatively
+#' new and still developing.
+#' 
+#' This analysis reveals that the relationship between school sector and
+#' educational achievement in lower-middle income countries is far from
+#' uniform. While several countries show significant private school
+#' advantages, others demonstrate that effective public education systems
+#' can achieve superior or equivalent results.
+#' 
+#' Vietnam's exceptional performance in both sectors proves that
+#' lower-middle income countries can achieve educational excellence through
+#' systematic investment and effective governance.
+#' 
+#' The key insight is that sector type (public vs private) is less
+#' important than system quality, teacher effectiveness, and educational
+#' governance. Countries should focus on improving educational quality
+#' across all sectors rather than assuming private education is inherently
+#' superior.
+#' 
+#' ### Public vs Private school performance for Upper Middle Income Countries
+#' 
+#' This analysis examines the performance gap between private and public
+#' schools across 23 upper-middle income countries in PISA 2022.
+#' 
+#' The data reveals significant variation in the private-public school
+#' performance differential, ranging from a 17-point advantage for public
+#' schools to a remarkable 110-point advantage for private schools.
+#' 
+## ----PISA-data-exploration-public-vs-private-school-upper-middle-countries, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# 1. Join student and school data to get sector for each student
+student_school <- student %>%
+  left_join(
+    school %>% select(school_id, country, public_private),
+    by = c("school_id", "country") 
+  ) %>%
+  clean_names() # Makes column names snake_case
+
+# 2. Filter for valid rows
+student_school <- student_school %>%
+  filter(
+    public_private %in% c("public", "private"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Upper-middle income"
+  )
+
+# 3. Calculate weighted mean score per country and sector
+wm_sector <- student_school %>%
+  group_by(country, public_private, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Reshape and compute difference
+wm_wide <- wm_sector %>%
+  pivot_wider(
+    names_from = public_private,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(public), !is.na(private)) %>% # Only keep countries with both sectors
+  mutate(
+    diff_private_public = private - public
+  )
+
+# 5. Sort by difference and set country order for plotting
+wm_wide <- wm_wide %>%
+  arrange(diff_private_public) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_wide, aes(x = country_name)) +
+  geom_point(aes(y = public, color = "Public"), size = 3, shape = 16) +
+  geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
+  geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by School Type \n (Upper-middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "School Type"
+  ) +
+  scale_color_manual(values = c("Public" = "#23395d", "Private" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+#
+
+#' 
+#' **Performance Distribution Patterns**
+#' 
+#' The upper-middle income countries demonstrate a more pronounced private
+#' school advantage compared to other income groups. Of the 23 countries
+#' analyzed, 19 countries (83%) show private schools outperforming public
+#' schools, while only 4 countries exhibit the opposite pattern.
+#' 
+#' **Countries Where Public Schools Outperform Private Schools**
+#' 
+#' Four countries buck the global trend of private school superiority:
+#' 
+#' -   **Serbia** shows the largest public school advantage (-17.1 points),
+#'     suggesting effective public education policies.
+#' 
+#' -   **Kazakhstan** demonstrates a moderate public school lead (-12.1
+#'     points).
+#' 
+#' -   **Republic of Moldova** and **Montenegro** show minimal differences
+#'     (-1.1 and -0.7 points respectively), indicating near-parity between
+#'     sectors.
+#' 
+#' **Countries with Moderate Private School Advantages**
+#' 
+#' Several countries exhibit small to moderate private school advantages
+#' (0-20 points):
+#' 
+#' -   **Azerbaijan, Mexico, and Turkey** show minimal gaps (3.4-3.9
+#'     points).
+#' 
+#' -   **Dominican Republic through Thailand** demonstrate moderate
+#'     advantages (4.8-19.9 points).
+#' 
+#' This group suggests relatively balanced educational systems with
+#' manageable inequality between sectors.
+#' 
+#' **Countries with Significant Private School Advantages**
+#' 
+#' Eight countries display substantial private school advantages (20-45
+#' points):
+#' 
+#' -   **Georgia, Malaysia, Kosovo, and Brazil** show gaps of 20-31 points.
+#' 
+#' -   **North Macedonia and Guatemala** exhibit larger disparities (38-43
+#'     points).
+#' 
+#' These gaps indicate significant educational inequality within national
+#' systems.
+#' 
+#' **Exceptional Case: Jamaica**
+#' 
+#' **Jamaica** stands as a complete outlier with a 110.4-point private
+#' school advantage, representing the most extreme educational inequality
+#' in the dataset. This gap suggests fundamental systemic differences
+#' between private and public education quality in the country.
+#' 
+#' **Regional and Economic Context**
+#' 
+#' **Economic Development Correlation**
+#' 
+#' The upper-middle income group shows interesting patterns related to
+#' economic transition:
+#' 
+#' -   Countries with recent economic growth (Kazakhstan, Azerbaijan) tend
+#'     to have smaller gaps.
+#' 
+#' -   Traditional middle-income countries (Argentina, Colombia, Brazil)
+#'     show moderate to large private advantages.
+#' 
+#' This suggests that educational inequality may persist even as countries
+#' develop economically.
+#' 
+#' **Geographic Patterns**
+#' 
+#' **Eastern Europe and Central Asia**: Mixed results, with Serbia favoring
+#' public schools while Bulgaria and North Macedonia show private
+#' advantages.
+#' 
+#' **Latin America**: Consistently shows private school advantages, from
+#' moderate (Mexico) to extreme (Jamaica).
+#' 
+#' **Southeast Asia**: Thailand and Malaysia demonstrate significant
+#' private advantages, reflecting regional educational stratification.
+#' 
+#' **Educational Policy Implications**
+#' 
+#' **Systems Requiring Attention**
+#' 
+#' Countries with large private-public gaps (over 25 points) may need
+#' comprehensive education reform focusing on:
+#' 
+#' -   Public school resource allocation
+#' 
+#' -   Teacher training and retention
+#' 
+#' -   Infrastructure development
+#' 
+#' -   Quality assurance mechanisms
+#' 
+#' **Successful Public Systems**
+#' 
+#' **Serbia** and **Kazakhstan** provide models for effective public
+#' education in middle-income contexts, suggesting that well-managed public
+#' systems can compete with or exceed private sector performance.
+#' 
+#' **Equity Concerns**
+#' 
+#' The prevalence of private school advantages in this income group
+#' highlights the risk of educational stratification during economic
+#' development phases, potentially undermining social mobility and equality
+#' of opportunity.
+#' 
+#' Upper-middle income countries face a critical juncture in educational
+#' development. While economic growth provides resources for educational
+#' improvement, the data suggests that benefits often accrue
+#' disproportionately to private institutions.
+#' 
+#' Countries like Serbia demonstrate that strong public systems are
+#' achievable, while extreme cases like Jamaica highlight the urgent need
+#' for comprehensive educational reform to prevent educational apartheid.
+#' 
+#' Policymakers in this income group must prioritize public education
+#' investment to ensure that economic development translates into equitable
+#' educational opportunities for all students.
+#' 
+#' ### Public vs Private school performance for High Income Countries
+#' 
+#' This analysis examines the performance gap between private and public
+#' schools across 43 high-income countries in PISA 2022.
+#' 
+#' Unlike lower-income groups, high-income countries show a more balanced
+#' distribution of outcomes, with 16 countries (37%) favoring public
+#' schools and 27 countries (63%) showing private school advantages. The
+#' performance gaps are generally smaller than in other income groups,
+#' reflecting more mature and equitable educational systems.
+#' 
+## ----PISA-data-exploration-public-vs-private-school-high-income-countries, message=FALSE, warning=FALSE-----
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# 1. Join student and school data to get sector for each student
+student_school <- student %>%
+  left_join(
+    school %>% select(school_id, country, public_private),
+    by = c("school_id", "country") 
+  ) %>%
+  clean_names() # Makes column names snake_case
+
+# 2. Filter for valid rows
+student_school <- student_school %>%
+  filter(
+    public_private %in% c("public", "private"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "High income"
+  )
+
+# 3. Calculate weighted mean score per country and sector
+wm_sector <- student_school %>%
+  group_by(country, public_private, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Reshape and compute difference
+wm_wide <- wm_sector %>%
+  pivot_wider(
+    names_from = public_private,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(public), !is.na(private)) %>% # Only keep countries with both sectors
+  mutate(
+    diff_private_public = private - public
+  )
+
+# 5. Sort by difference and set country order for plotting
+wm_wide <- wm_wide %>%
+  arrange(diff_private_public) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_wide, aes(x = country_name)) +
+  geom_point(aes(y = public, color = "Public"), size = 3, shape = 16) +
+  geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
+  geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by School Type \n (High income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "School Type"
+  ) +
+  scale_color_manual(values = c("Public" = "#23395d", "Private" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' **Performance Distribution Patterns**
+#' 
+#' High-income countries demonstrate the most balanced private-public
+#' performance relationship among all income groups. The data reveals three
+#' distinct clusters: countries with strong public school advantages, those
+#' with near-parity, and nations with moderate to significant private
+#' school benefits.
+#' 
+#' **Countries Where Public Schools Significantly Outperform Private
+#' Schools**
+#' 
+#' ***Strong Public School Systems (gaps \> 20 points):***
+#' 
+#' -   **Sweden** leads with the largest public advantage (-77.5 points),
+#'     demonstrating exceptional public education effectiveness.
+#' 
+#' -   **Netherlands** (-43.9 points) and **Slovenia** (-43.1 points) show
+#'     substantial public school superiority.
+#' 
+#' -   **Germany** (-23.4 points) rounds out this high-performing public
+#'     sector group.
+#' 
+#' ***Moderate Public School Advantages (10-20 points):***
+#' 
+#' -   **Lithuania, Iceland, Croatia, Taiwan, and Slovakia** show
+#'     consistent public school benefits.
+#' 
+#' These countries demonstrate well-funded, effectively managed public
+#' systems.
+#' 
+#' ***Minimal Public School Advantages (0-10 points):***
+#' 
+#' -   **Norway, Poland, Latvia, Japan, Romania, Denmark, and Ireland**
+#'     show small public advantages or near-parity.
+#' 
+#' This group represents highly equitable educational systems with minimal
+#' sector-based disparities.
+#' 
+#' **Countries with Private School Advantages**
+#' 
+#' ***Minimal Private Advantages (0-10 points):***
+#' 
+#' -   **Hungary through Spain** show small private school benefits
+#'     (1.4-9.9 points).
+#' 
+#' This includes major economies like **France, USA, and South Korea**,
+#' indicating relatively equitable systems.
+#' 
+#' ***Moderate Private Advantages (10-20 points):***
+#' 
+#' -   **Canada, Macao, Austria, Greece, Australia, New Zealand, Hong Kong,
+#'     Chile, and Singapore** demonstrate moderate gaps.
+#' 
+#' Even Singapore, despite its 17.8-point private advantage, maintains high
+#' overall performance in both sectors.
+#' 
+#' ***Significant Private Advantages (20+ points):***
+#' 
+#' -   **Switzerland, Qatar, Czechia, and the UK** show substantial private
+#'     school benefits (25-33 points)
+#' 
+#' -   **UAE** stands out with the largest private advantage (49.5 points)
+#'     among high-income countries
+#' 
+#' **Regional and Development Patterns**
+#' 
+#' ***Nordic Model Excellence***
+#' 
+#' **Scandinavian countries** (Sweden, Iceland, Norway, Denmark)
+#' predominantly favor public schools, reflecting their comprehensive
+#' welfare state approach to education. Sweden's exceptional 77-point
+#' public advantage exemplifies this model's effectiveness.
+#' 
+#' ***Continental European Balance***
+#' 
+#' **Western and Central Europe** shows mixed patterns:
+#' 
+#' -   **German-speaking countries** vary significantly: Germany favors
+#'     public schools while Switzerland and Austria favor private schools.
+#' 
+#' -   **Southern Europe** (Italy, Spain, Greece) shows moderate private
+#'     advantages.
+#' 
+#' -   **Eastern European EU members** generally maintain competitive
+#'     public systems.
+#' 
+#' ***Anglo-Saxon Private Tendencies***
+#' 
+#' **English-speaking countries** consistently show private school
+#' advantages:
+#' 
+#' -   **Australia, New Zealand, UK, and Canada** demonstrate moderate
+#'     private benefits.
+#' 
+#' -   **USA** shows a surprisingly small gap (4.9 points), indicating
+#'     relatively balanced systems.
+#' 
+#' This pattern reflects historical private school traditions in these
+#' societies.
+#' 
+#' ***Asian High Performers***
+#' 
+#' **East Asian countries** show interesting variation:
+#' 
+#' -   **Japan** achieves near-parity with slight public advantage.
+#' 
+#' -   **South Korea** shows small private advantage.
+#' 
+#' -   **Singapore** and **Hong Kong** maintain moderate private advantages
+#'     while achieving exceptional overall performance.
+#' 
+#' -   **Taiwan** favors public schools, bucking regional trends.
+#' 
+#' ***Gulf States Pattern***
+#' 
+#' **Oil-rich nations** (UAE, Qatar, Saudi Arabia) show consistent private
+#' school advantages, likely reflecting rapid educational development and
+#' reliance on international private institutions.
+#' 
+#' **Educational System Maturity Indicators**
+#' 
+#' ***Equity Achievement***
+#' 
+#' High-income countries demonstrate significantly smaller performance gaps
+#' compared to other income groups, suggesting that economic development
+#' enables more equitable educational systems regardless of public-private
+#' distinctions.
+#' 
+#' ***Quality Convergence***
+#' 
+#' Many high-income countries achieve high performance in both sectors,
+#' indicating that competition and regulation have elevated standards
+#' across the board.
+#' 
+#' **Policy Implications**
+#' 
+#' ***For Countries with Large Public Advantages:***
+#' 
+#' -   Sweden and Netherlands provide models for exceptional public
+#'     education.
+#' 
+#' -   These systems suggest that well-funded, professionally managed
+#'     public education can outperform private alternatives
+#' 
+#' ***For Countries with Large Private Advantages:***
+#' 
+#' -   UAE, UK, and Czechia may need to examine public sector investment
+#'     and management.
+#' 
+#' -   These gaps suggest potential equity concerns even in wealthy
+#'     nations.
+#' 
+#' ***For Balanced Systems:***
+#' 
+#' -   Countries achieving near-parity (Ireland, Denmark, Japan)
+#'     demonstrate optimal educational equity.
+#' 
+#' -   These systems provide models for minimizing socioeconomic
+#'     educational stratification.
+#' 
+#' **Global Competitiveness Context**
+#' 
+#' High-income countries occupy most top positions in global PISA rankings,
+#' regardless of public-private performance gaps. Countries like
+#' **Singapore, Japan, and Taiwan** achieve world-leading results while
+#' maintaining different sector balance approaches, suggesting multiple
+#' pathways to educational excellence.
+#' 
+#' High-income countries demonstrate that economic development enables
+#' educational equity across sectors. The prevalence of strong public
+#' systems (particularly in Nordic countries) challenges assumptions about
+#' private school superiority, while countries with private advantages
+#' often maintain high public performance standards.
+#' 
+#' The key insight is that in mature, well-funded educational systems,
+#' sector type matters less than overall system quality, professional
+#' management, and equitable resource allocation. Countries like Sweden
+#' prove that exceptional public education is achievable, while nations
+#' like Singapore show that private advantages need not compromise overall
+#' system excellence.
+#' 
+#' Policymakers in high-income countries should focus on system-wide
+#' quality improvement rather than sector competition, using successful
+#' models like those in Scandinavia and East Asia to inform comprehensive
+#' educational strategies.
+#' 
+#' ### The gender performance gap for the Lower Middle Income Countries
+#' 
+#' This analysis examines the gender performance gap across 10 lower-middle
+#' income countries participating in PISA 2022.
+#' 
+#' The data reveals a consistent pattern where female students outperform
+#' male students in all countries analyzed, with gaps ranging from minimal
+#' (0.5 points) to substantial (31 points).
+#' 
+#' This finding challenges traditional assumptions about gender performance
+#' in mathematics and highlights important educational equity
+#' considerations.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-lower-middle-countries, message=FALSE, warning=FALSE--------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Standardize gender, filter for valid data (Lower-middle income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Lower-middle income"
+  )
+
+# 3. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 5. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by Gender (Lower-middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' **Performance Gap Categories**
+#' 
+#' ***Minimal Gender Gaps (0-5 points):***
+#' 
+#' -   **Vietnam** (0.5 points): Achieves near-perfect gender parity while
+#'     maintaining the highest overall performance (468 points for both
+#'     genders).
+#' 
+#'     **El Salvador** (1.3 points): Shows minimal gender disparity with
+#'     very small female advantage.
+#' 
+#' -   **Uzbekistan** (5.4 points): Maintains relatively balanced
+#'     performance despite overall lower scores.
+#' 
+#' ***Moderate Gender Gaps (6-15 points):***
+#' 
+#' -   **Ukraine** (6.6 points): Demonstrates moderate female advantage
+#'     with high overall performance (441 female, 435 male).
+#' 
+#' -   **Cambodia** (9.9 points): Shows growing gender disparity with lower
+#'     overall achievement.
+#' 
+#' -   **Morocco** (10.9 points): Exhibits double-digit female advantage.
+#' 
+#' -   **Indonesia** (12.8 points): Demonstrates significant female
+#'     superiority.
+#' 
+#' -   **Mongolia** (15.3 points): Shows substantial gender gap while
+#'     maintaining moderate overall performance.
+#' 
+#' ***Large Gender Gaps (15+ points):***
+#' 
+#' -   **Philippines** (20.0 points): Exhibits substantial female advantage
+#'     with concerning overall low performance.
+#' 
+#' -   **Occupied Palestinian Territory** (31.0 points): Shows the largest
+#'     gender gap in the group, with females significantly outperforming
+#'     males. This could be explained by the current geopolitical
+#'     instability requiring.
+#' 
+#' **Performance Level Analysis**
+#' 
+#' ***High-Performing Countries with Gender Equity***
+#' 
+#' **Vietnam** stands out as the exemplary model, achieving both the
+#' highest overall performance and near-perfect gender parity. This
+#' demonstrates that educational excellence and gender equity are
+#' achievable simultaneously in lower-middle income contexts.
+#' 
+#' **Ukraine** combines strong overall performance with manageable gender
+#' gaps, suggesting effective educational policies prior to recent
+#' disruptions.
+#' 
+#' ***Moderate Performers with Growing Gaps***
+#' 
+#' **Mongolia and Indonesia** show concerning patterns where moderate
+#' overall performance coexists with significant gender disparities,
+#' suggesting systemic issues affecting male student achievement.
+#' 
+#' ***Lower Performers with Substantial Gaps***
+#' 
+#' **Philippines and Occupied Palestinian Territory** exhibit the most
+#' troubling combination of low overall performance and large gender gaps,
+#' indicating multiple educational challenges requiring comprehensive
+#' intervention.
+#' 
+#' **Regional and Cultural Patterns**
+#' 
+#' ***Southeast Asian Excellence***
+#' 
+#' **Vietnam** demonstrates that Southeast Asian educational approaches can
+#' achieve both high performance and gender equity, serving as a regional
+#' model.
+#' 
+#' **Indonesia and Philippines** show contrasting outcomes within the same
+#' region, suggesting that similar cultural contexts can produce different
+#' gender equity results based on educational policies and implementation.
+#' 
+#' ***Post-Soviet Transition Success***
+#' 
+#' **Ukraine and Uzbekistan** represent post-Soviet educational systems
+#' with relatively strong female performance, possibly reflecting
+#' historical emphasis on gender equality in education.
+#' 
+#' ***Middle Eastern Complexities***
+#' 
+#' **Morocco and Occupied Palestinian Territory** show varying degrees of
+#' female advantage, challenging stereotypes about gender in Middle Eastern
+#' education while highlighting the need for targeted male student support.
+#' 
+#' ***Latin American Variation***
+#' 
+#' **El Salvador** achieves near-parity, suggesting effective
+#' gender-inclusive educational approaches in Central America.
+#' 
+#' **Educational System Implications**
+#' 
+#' ***Factors Contributing to Female Advantage***
+#' 
+#' **Educational Engagement**: The consistent female advantage may reflect
+#' higher educational motivation and engagement among girls in these
+#' contexts, possibly driven by perceptions of education as a pathway to
+#' social mobility.
+#' 
+#' **Cultural Shifts**: Changing societal attitudes toward female education
+#' may be creating environments where girls outperform traditional
+#' expectations.
+#' 
+#' **Teaching Methods**: Educational approaches in these countries may be
+#' more conducive to female learning styles, or girls may be adapting
+#' better to current assessment formats.
+#' 
+#' ***Male Student Achievement Concerns***
+#' 
+#' **Systemic Underperformance**: The universal male underachievement
+#' raises concerns about educational approaches that may not be engaging
+#' male students effectively.
+#' 
+#' **Social and Economic Factors**: Economic pressures may
+#' disproportionately affect male students through early workforce entry or
+#' different educational expectations.
+#' 
+#' **Educational Policies**: Current educational strategies may
+#' inadvertently favor female students or fail to address specific
+#' challenges facing male learners.
+#' 
+#' **Policy Recommendations**
+#' 
+#' ***For Countries with Large Gaps (Philippines, Palestinian Territory)***
+#' 
+#' **Comprehensive Gender Analysis**: Conduct detailed studies to
+#' understand root causes of large gender disparities.
+#' 
+#' **Male Student Support Programs**: Develop targeted interventions to
+#' improve male student engagement and achievement.
+#' 
+#' **Teacher Training**: Implement gender-sensitive pedagogy training for
+#' educators.
+#' 
+#' ***For Countries with Moderate Gaps (Mongolia, Indonesia, Morocco)***
+#' 
+#' **Early Intervention**: Identify and address gender gaps at elementary
+#' levels before they become entrenched.
+#' 
+#' **Curriculum Review**: Examine whether current curricula and teaching
+#' methods inadvertently disadvantage male students.
+#' 
+#' **Parent and Community Engagement**: Address social factors that may be
+#' affecting male educational participation.
+#' 
+#' ***For Near-Parity Countries (Vietnam, El Salvador)***
+#' 
+#' **Model Documentation**: Document successful practices for sharing with
+#' other countries.
+#' 
+#' **Maintenance Strategies**: Ensure continued gender equity while
+#' improving overall performance.
+#' 
+#' **Regional Leadership**: Serve as examples for neighboring countries
+#' facing larger gender gaps.
+#' 
+#' **Global Context and Implications**
+#' 
+#' ***Challenging Traditional Narratives***
+#' 
+#' The universal female advantage in lower-middle income countries
+#' challenges traditional concerns about girls' performance, suggesting
+#' that context-specific factors significantly influence gender achievement
+#' patterns.
+#' 
+#' ***Development Implications***
+#' 
+#' These findings suggest that as countries develop, attention must be paid
+#' to ensuring educational benefits reach all students equitably, including
+#' male students who may be falling behind in certain contexts.
+#' 
+#' ***International Cooperation***
+#' 
+#' Countries showing successful gender equity (particularly Vietnam) should
+#' be studied and their practices adapted for implementation in countries
+#' with larger gaps.
+#' 
+#' The universal female advantage among lower-middle income countries
+#' represents a significant shift in educational gender dynamics. While
+#' celebrating improved female educational outcomes, policymakers must
+#' address the emerging challenge of male student underachievement to
+#' ensure truly equitable educational systems.
+#' 
+#' Vietnam's model of high performance with gender parity provides a
+#' roadmap for other countries, while nations with large gender gaps
+#' require immediate attention to prevent the entrenchment of educational
+#' inequities. The goal should be raising overall performance for all
+#' students while maintaining or achieving gender balance, ensuring that
+#' educational progress benefits entire populations rather than creating
+#' new forms of inequality.
+#' 
+#' ### Mathematics Gender Gap Analysis: Lower-Middle Income Countries in 2022
+#' 
+#' Analysis based on PISA 2022 weighted mean scores for mathematics across
+#' 10 lower-middle income countries. Gender gap calculated as male score
+#' minus female score, where negative values indicate male advantage and
+#' positive values indicate female advantage. Countries classified using
+#' World Bank income classifications.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-lower-middle-countries-math, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Standardize gender, filter for valid data (Lower-middle income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Lower-middle income"
+  )
+
+# 2. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_math_score = weighted.mean(math, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_math_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 5. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Math Score by Gender \n (Lower middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Math Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' The lower-middle income countries show a remarkable shift toward female
+#' advantages, with 60% of participating countries demonstrating superior
+#' female mathematical performance.
+#' 
+#' **Gender Distribution Pattern**
+#' 
+#' -   **Male advantage**: 4 out of 10 countries (40%) show males
+#'     outperforming females.
+#' 
+#' -   **Female advantage**: 6 countries (60%) show females outperforming
+#'     males.
+#' 
+#' -   **Near parity**: No countries show minimal differences.
+#' 
+#' This represents the most female-favorable distribution across all income
+#' categories, suggesting unique educational dynamics in lower-middle
+#' income contexts.
+#' 
+#' **Regional and Cultural Patterns**
+#' 
+#' ***Southeast Asian Countries***
+#' 
+#' -   **Mixed results**: Vietnam shows male advantage (-10.7), while
+#'     Philippines (+13.9) and Indonesia (+7.9) show strong female
+#'     advantages.
+#' 
+#' -   **Cambodia**: Slight female advantage (+2.8)
+#' 
+#' ***Post-Soviet/Eastern European Countries***
+#' 
+#' -   **Male advantages**: Ukraine (-10.1), Uzbekistan (-5.9)
+#' 
+#' Consistent with some upper-middle income Eastern European patterns.
+#' 
+#' ***Middle Eastern/North African Countries***
+#' 
+#' -   **Female advantages**: Morocco (+3.0), Occupied Palestinian
+#'     Territory (+15.3)
+#' 
+#' Continues trend seen in upper-middle income Middle Eastern countries.
+#' 
+#' ***Central Asian Countries***
+#' 
+#' -   **Mongolia**: Female advantage (+4.8)
+#' 
+#' Contrasts with Kazakhstan's near-parity in upper-middle income category.
+#' 
+#' ***Latin American Countries***
+#' 
+#' -   **El Salvador**: Small male advantage (-3.5)
+#' 
+#' Different from consistent male advantages in upper-middle income Latin
+#' America
+#' 
+#' **Exceptional Cases:**
+#' 
+#' -   **Vietnam's high performance**: Despite male advantage, both genders
+#'     perform at near-middle-income levels.
+#' 
+#' -   **Palestinian Territory's large gap**: +15.3 female advantage among
+#'     highest globally.
+#' 
+#' -   **Philippines' significant advantage**: +13.9 points represents
+#'     substantial female outperformance.
+#' 
+#' **Educational Implications:**
+#' 
+#' 1.  **Development stage effects**: Lower-middle income countries may be
+#'     experiencing educational transitions that particularly benefit
+#'     female students.
+#' 
+#' 2.  **Resource allocation**: Limited educational resources might be
+#'     distributed in ways that advantage female participation and
+#'     achievement.
+#' 
+#' 3.  **Cultural shifts**: Rapid social changes in developing economies
+#'     may be creating educational opportunities that particularly benefit
+#'     girls.
+#' 
+#' **Methodological Considerations:**
+#' 
+#' -   **Participation rates**: Some countries may have different
+#'     participation patterns by gender.
+#' 
+#' -   **Educational access**: Results reflect students who have access to
+#'     education, which may differ by gender across countries.
+#' 
+#' -   **Socioeconomic factors**: Family investment in education may vary
+#'     by gender and income level.
+#' 
+#' **Global Gender Equity Implications**
+#' 
+#' The pattern across income levels suggests that **gender equity in
+#' mathematics education is not simply a function of economic
+#' development**. Instead, lower-middle income countries demonstrate that
+#' female mathematical achievement can exceed male performance even in
+#' resource-constrained environments.
+#' 
+#' This challenges assumptions about the relationship between economic
+#' development and gender equity, suggesting that:
+#' 
+#' -   **Policy and cultural factors** may be more important than absolute
+#'     income levels.
+#' 
+#' -   **Educational transitions** during development may create windows of
+#'     opportunity for gender equity.
+#' 
+#' -   **International development efforts** should consider these nuanced
+#'     patterns when designing gender equity interventions.
+#' 
+#' ### The gender performance gap for the Upper Middle Income Countries
+#' 
+#' This analysis examines the gender performance gap in combined
+#' mathematics, reading, and science scores across 23 upper-middle income
+#' countries participating in PISA 2022.
+#' 
+#' The data reveals a mixed but predominantly female-favoring pattern, with
+#' 18 countries (78%) showing female advantages and 5 countries (22%)
+#' showing male advantages.
+#' 
+#' The gender gaps range from a 7.5-point male advantage to a 31.6-point
+#' female advantage, indicating significant variation in gender equity
+#' across this income group.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-upper-middle-countries, message=FALSE, warning=FALSE--------
+knitr::opts_chunk$set(echo=FALSE)
+
+
+# 1. Standardize gender, filter for valid data (Upper-middle income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Upper-middle income"
+  )
+
+# 3. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 4. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 5. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 6. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by Gender (Upper-middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' **Performance Distribution Overview**
+#' 
+#' Upper-middle income countries show a clear trend toward female
+#' educational advantage, with nearly 4 out of 5 countries demonstrating
+#' superior female performance. However, the pattern is more nuanced than
+#' in lower-middle income countries, with some notable exceptions and
+#' varying gap magnitudes.
+#' 
+#' **Countries Where Males Outperform Females**
+#' 
+#' -   **Peru** (-7.5 points): Shows the largest male advantage, bucking
+#'     regional Latin American trends.
+#' 
+#' -   **Mexico** (-6.0 points): Demonstrates moderate male superiority in
+#'     North America.
+#' 
+#' -   **Colombia** (-2.9 points): Exhibits minimal male advantage.
+#' 
+#' -   **Guatemala** (-2.2 points): Shows slight male preference.
+#' 
+#' -   **Argentina** (-1.0 points): Achieves near-parity with minimal male
+#'     edge.
+#' 
+#' **Regional Pattern**: Notably, all male-advantage countries are located
+#' in Latin America, suggesting regional cultural or educational factors
+#' that may favor male academic performance.
+#' 
+#' **Countries with Female Advantages**
+#' 
+#' ***Minimal Female Advantages (0-10 points):***
+#' 
+#' -   **Paraguay** (0.8 points): Near-parity with slight female edge.
+#' 
+#' -   **Brazil** (1.0 points): Minimal female advantage within Latin
+#'     America.
+#' 
+#' -   **Serbia** (6.4 points): Moderate female superiority in Southeast
+#'     Europe.
+#' 
+#' -   **Turkey** (8.2 points): Growing female advantage in Western Asia.
+#' 
+#' -   **Kosovo** (9.8 points): Approaching double-digit female
+#'     superiority.
+#' 
+#' ***Moderate Female Advantages (10-20 points):***
+#' 
+#' -   **Moldova, Kazakhstan, Montenegro, Thailand, North Macedonia,
+#'     Dominican Republic, Bulgaria, Azerbaijan, Georgia, Malaysia,
+#'     Jamaica**: This diverse group shows consistent female advantages
+#'     ranging from 10.3 to 20.4 points.
+#' 
+#' -   **Geographic Diversity**: Includes Eastern European, Central Asian,
+#'     Southeast Asian, Caribbean, and Middle Eastern countries.
+#' 
+#' ***Large Female Advantages (20+ points):***
+#' 
+#' -   **Albania** (28.3 points): Shows substantial female superiority in
+#'     the Balkans.
+#' 
+#' -   **Jordan** (31.6 points): Exhibits the largest female advantage,
+#'     representing significant gender disparity in the Middle East.
+#' 
+#' **Regional Analysis:**
+#' 
+#' ***Latin American Exceptionalism***
+#' 
+#' **Unique Male Advantage Pattern**: Latin America is the only region in
+#' upper-middle income countries where males consistently outperform or
+#' match females. This contrasts sharply with global trends and suggests
+#' distinctive regional factors:
+#' 
+#' -   Cultural attitudes toward male academic achievement.
+#' 
+#' -   Economic structures that may motivate male educational engagement.
+#' 
+#' -   Educational policies that effectively support male students.
+#' 
+#' **Brazil as Transition Case**: Brazil's minimal female advantage (1.0
+#' point) represents a bridge between male-advantage and female-advantage
+#' patterns in the region.
+#' 
+#' ***Eastern European Female Strength***
+#' 
+#' **Consistent Female Advantages**: Former Soviet and Eastern European
+#' countries (Serbia, Moldova, Montenegro, Bulgaria, North Macedonia,
+#' Albania, Kosovo) show strong female performance, possibly reflecting:
+#' 
+#' -   Historical emphasis on gender equality in education.
+#' 
+#' -   Changing economic opportunities favoring educated women.
+#' 
+#' -   Effective girl-friendly educational policies.
+#' 
+#' ***Asian Diversity***
+#' 
+#' **Mixed Patterns**: Asian countries show varied outcomes:
+#' 
+#' -   **Turkey** and **Azerbaijan** (moderate female advantages) suggest
+#'     changing gender dynamics.
+#' 
+#' -   **Kazakhstan** (moderate female advantage) reflects Central Asian
+#'     trends.
+#' 
+#' -   **Thailand and Malaysia** (significant female advantages) align with
+#'     broader Southeast Asian patterns.
+#' 
+#' ***Middle Eastern Female Emergence***
+#' 
+#' **Jordan's Exceptional Gap**: The 31.6-point female advantage represents
+#' the largest gender gap in the dataset, suggesting dramatic changes in
+#' female educational engagement in the Middle East.
+#' 
+#' Performance Level Considerations
+#' 
+#' ***High-Performing Countries with Gender Issues***
+#' 
+#' **Turkey** (466 female, 458 male): Achieves the highest overall
+#' performance in the group while maintaining an 8.3-point female
+#' advantage, demonstrating that excellence and gender equity can coexist.
+#' 
+#' **Serbia** (446 female, 440 male): Shows strong overall performance with
+#' moderate female advantage.
+#' 
+#' ***Moderate Performers with Large Gaps***
+#' 
+#' **Bulgaria, Kazakhstan, Moldova**: These countries achieve moderate
+#' performance levels (407-423 range) while maintaining significant female
+#' advantages, suggesting that gender gaps may persist even in reasonably
+#' performing systems.
+#' 
+#' ***Lower Performers with Extreme Gaps***
+#' 
+#' **Jordan and Albania**: Despite large female advantages, these countries
+#' show concerning overall performance levels, indicating that female
+#' superiority alone doesn't guarantee system-wide educational success.
+#' 
+#' ***Comparative Analysis with Lower-Middle Income Countries***
+#' 
+#' ***Similarities***
+#' 
+#' -   **Female Advantage Dominance**: Both income groups show
+#'     predominantly female-favoring patterns.
+#' 
+#' -   **Regional Clustering**: Both show regional patterns in gender
+#'     performance.
+#' 
+#' -   **Range of Gaps**: Both demonstrate significant variation in gap
+#'     magnitudes.
+#' 
+#' ***Key Differences***
+#' 
+#' -   **Male Advantage Presence**: Upper-middle income countries show some
+#'     male advantages (22% vs. 0% in lower-middle income).
+#' 
+#' -   **Regional Variation**: Latin American male advantages are unique to
+#'     upper-middle income group.
+#' 
+#' -   **Smaller Maximum Gaps**: Upper-middle income maximum gap (31.6) is
+#'     similar to lower-middle income (31.0).
+#' 
+#' **Educational Policy Implications**
+#' 
+#' ***For Male-Advantage Countries (Latin America)***
+#' 
+#' **Sustaining Balance**: Countries like Argentina and Colombia with
+#' minimal gaps should focus on maintaining gender equity while improving
+#' overall performance.
+#' 
+#' **Learning from Success**: Peru and Mexico's male advantages should be
+#' studied to understand effective male student engagement strategies,
+#' while ensuring female students aren't disadvantaged.
+#' 
+#' ***For Large Female-Advantage Countries***
+#' 
+#' **Male Student Crisis**: Jordan and Albania face urgent needs to address
+#' male educational underachievement through:
+#' 
+#' -   Targeted male student support programs.
+#' 
+#' -   Analysis of cultural factors discouraging male academic engagement.
+#' 
+#' -   Examination of teaching methods that may inadvertently favor female
+#'     students.
+#' 
+#' ***For Balanced High Performers***
+#' 
+#' **Turkey and Serbia** provide models for achieving both high performance
+#' and manageable gender gaps, offering lessons for other countries in the
+#' group.
+#' 
+#' **Socioeconomic Development Context**
+#' 
+#' ***Economic Transition Effects***
+#' 
+#' Many upper-middle income countries are experiencing rapid economic and
+#' social transitions that may be affecting gender educational patterns:
+#' 
+#' -   **Changing Labor Markets**: New economic opportunities may be
+#'     motivating different educational engagement patterns by gender.
+#' 
+#' -   **Social Modernization**: Evolving attitudes toward gender roles may
+#'     be influencing educational outcomes.
+#' 
+#' -   **Policy Evolution**: Educational policies are adapting to changing
+#'     economic and social needs.
+#' 
+#' ***Development Challenges***
+#' 
+#' The persistence of large gender gaps in this income group suggests that
+#' economic development alone doesn't automatically resolve educational
+#' gender inequities, requiring targeted policy interventions.
+#' 
+#' **Recommendations**
+#' 
+#' ***System-Wide Strategies***
+#' 
+#' 1.  **Comprehensive Gender Audits**: All countries should analyze their
+#'     educational systems for gender-specific barriers and advantages
+#' 
+#' 2.  **Teacher Training**: Implement gender-sensitive pedagogy across all
+#'     educational levels
+#' 
+#' 3.  **Curriculum Review**: Ensure educational content and methods engage
+#'     all students effectively
+#' 
+#' ***Targeted Interventions***
+#' 
+#' 1.  **Male Student Support**: Countries with large female advantages
+#'     need specific programs to re-engage male students
+#' 
+#' 2.  **Female Student Protection**: Male-advantage countries should
+#'     ensure female students receive equal opportunities and support
+#' 
+#' 3.  **Community Engagement**: Address societal attitudes that may be
+#'     influencing gender educational patterns
+#' 
+#' ***Regional Cooperation***
+#' 
+#' 1.  **Latin American Best Practices**: Share successful male engagement
+#'     strategies across the region
+#' 
+#' 2.  **Eastern European Models**: Document and disseminate effective
+#'     female educational support systems
+#' 
+#' 3.  **Cross-Regional Learning**: Facilitate knowledge exchange between
+#'     regions with different gender patterns
+#' 
+#' Upper-middle income countries present a complex gender education
+#' landscape that defies simple generalizations. While female advantages
+#' predominate globally, the Latin American male advantage pattern
+#' demonstrates that context-specific factors significantly influence
+#' gender educational outcomes.
+#' 
+#' The key challenge is achieving both high overall performance and gender
+#' equity simultaneously. Countries like Turkey and Serbia provide models
+#' for this balance, while extreme cases like Jordan and Peru highlight the
+#' urgency of addressing gender disparities in either direction.
+#' 
+#' Success requires moving beyond simple gender gap measurements to
+#' understand the underlying cultural, economic, and educational factors
+#' driving these patterns, ensuring that educational progress benefits all
+#' students regardless of gender while maintaining high overall achievement
+#' standards.
+#' 
+#' ### Mathematics Gender Gap Analysis: Upper-Middle Income Countries in 2022
+#' 
+#' The PISA 2022 mathematics results for upper-middle income countries
+#' reveal a notably different pattern compared to high-income nations.
+#' 
+#' While traditional male advantages persist in Latin American countries,
+#' several upper-middle income nations demonstrate female advantages,
+#' particularly in the Balkans, Middle East, and Southeast Asia.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-upper-middle-countries-math, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Standardize gender, filter for valid data (Upper-middle income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "Upper-middle income"
+  )
+
+# 2. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_math_score = weighted.mean(math, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 3. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_math_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 4. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 5. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Math Score by Gender \n (Upper middle income countries)",
+    x = "Countries",
+    y = "Weighted Mean Math Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' **Gender Distribution Pattern**
+#' 
+#' -   **Male advantage**: 11 out of 23 countries (48%) show males
+#'     outperforming females.
+#' 
+#' -   **Female advantage**: 10 countries (43%) show females outperforming
+#'     males.
+#' 
+#' -   **Near parity**: 2 countries show minimal gender differences (\< 1
+#'     point).
+#' 
+#' This represents a much more balanced distribution compared to
+#' high-income countries, where male advantages dominated.
+#' 
+#' **Magnitude of Gender Gaps**
+#' 
+#' ***Largest Male Advantages (\>10 points):***
+#' 
+#' -   Peru: 14.7-point gap (largest male advantage)
+#' 
+#' -   Paraguay: 12.3 points
+#' 
+#' -   Guatemala: 12.2 points
+#' 
+#' -   Serbia: 11.9 points
+#' 
+#' -   Mexico: 11.4 points
+#' 
+#' **Largest Female Advantages:**
+#' 
+#' -   Albania: +18.0 points
+#' 
+#' -   Jordan: +14.9 points
+#' 
+#' -   Jamaica: +12.0 points
+#' 
+#' -   Malaysia: +11.8 points
+#' 
+#' -   Azerbaijan: +6.5 points
+#' 
+#' -   Thailand: +6.2 points
+#' 
+#' **Near Gender Parity:**
+#' 
+#' -   Kosovo: 0.75-point difference
+#' 
+#' -   Kazakhstan: 0.46-point difference
+#' 
+#' **Regional Patterns**
+#' 
+#' ***Latin American Countries:***
+#' 
+#' -   Consistently show male advantages that range from 8.8 to 14.7 points
+#' 
+#' -   Peru (-14.7), Paraguay (-12.3), Guatemala (-12.2), Mexico (-11.4),
+#'     Colombia (-10.9), Argentina (-10.8), Brazil (-8.8)
+#' 
+#' -   Only exception: Dominican Republic (+2.5 female advantage)
+#' 
+#' ***Balkan/Eastern European Countries:***
+#' 
+#' -   Mixed but trending toward female advantages
+#' 
+#' -   Albania (+18.0), North Macedonia (+4.5), Montenegro (+0.5)
+#' 
+#' -   Serbia shows male advantage (-11.9)
+#' 
+#' -   Bulgaria shows female advantage (+3.8)
+#' 
+#' ***Middle Eastern Countries:***
+#' 
+#' -   Strong female advantages
+#' 
+#' -   Jordan (+14.9), Azerbaijan (+6.5)
+#' 
+#' ***Southeast Asian Countries:***
+#' 
+#' -   Female advantages prevalent
+#' 
+#' -   Malaysia (+11.8), Thailand (+6.2)
+#' 
+#' ***Central Asian Countries:***
+#' 
+#' -   Near parity: Kazakhstan (+0.5), Kosovo (-0.8)
+#' 
+#' ***Achievement Levels***
+#' 
+#' -   Performance range: 332-456 points (compared to 355-582 in
+#'     high-income countries).
+#' 
+#' -   Several countries perform below OECD average (≈490 points).
+#' 
+#' -   Turkey stands out as highest performer in this income category.
+#' 
+#' **Notable Observations**
+#' 
+#' -   **Albania's exceptional female advantage** (+18.0) represents the
+#'     largest gender gap favoring females in the entire PISA dataset.
+#' 
+#' -   **Middle Eastern female advantages** challenge common assumptions
+#'     about gender equity in these regions.
+#' 
+#' -   **Latin American consistency** in male advantages suggests strong
+#'     regional cultural patterns.
+#' 
+#' **Educational Implications:**
+#' 
+#' -   Upper-middle income countries may be experiencing educational
+#'     transitions that differently affect male and female mathematical
+#'     achievement.
+#' 
+#' -   Economic development level alone doesn't predict gender gap
+#'     patterns.
+#' 
+#' -   Cultural and policy factors appear to be primary drivers of gender
+#'     equity in mathematics.
+#' 
+#' ### The gender performance gap for the High Income Countries
+#' 
+#' This analysis examines the gender performance gap in combined
+#' mathematics, reading, and science scores across 46 high-income countries
+#' participating in PISA 2022.
+#' 
+#' The data reveals a predominantly female-favoring pattern, with 37
+#' countries (80%) showing female advantages and 9 countries (20%) showing
+#' male advantages.
+#' 
+#' The gender gaps range from a 7.4-point male advantage to a 22.4-point
+#' female advantage, demonstrating that even in wealthy nations, gender
+#' equity in education remains a complex challenge.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-high-income-countries, message=FALSE, warning=FALSE---------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Standardize gender, filter for valid data (High income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "High income"
+  )
+
+# 2. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 3. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 4. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 5. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Score by Gender (High income countries)",
+    x = "Countries",
+    y = "Weighted Mean Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' High-income countries show a strong trend toward female educational
+#' advantage, with 4 out of 5 countries demonstrating superior female
+#' performance. This pattern is consistent with global trends but shows
+#' more nuanced variations within this economically advanced group.
+#' 
+#' **Countries Where Males Outperform Females**
+#' 
+#' ***Male Advantage Countries (9 total):***
+#' 
+#' \- **Chile** (-7.4 points): Shows the largest male advantage in the
+#' group.
+#' 
+#' \- **Austria** (-4.0 points): Demonstrates moderate male superiority in
+#' Central Europe.
+#' 
+#' \- **Italy** (-3.1 points): Exhibits small but consistent male
+#' advantage.
+#' 
+#' \- **Macao, China** (-1.6 points): Shows minimal male preference in East
+#' Asia.
+#' 
+#' -   **United Kingdom** (-1.2 points): Near-parity with slight male edge.
+#' 
+#' \- **Uruguay** (-1.1 points): Minimal male advantage in South America.
+#' 
+#' \- **Ireland** (-0.5 points): Virtually perfect gender parity.
+#' 
+#' \- **Hungary** (-0.4 points): Near-perfect balance.
+#' 
+#' \- **Denmark** (-0.08 points): Essentially perfect gender equity.
+#' 
+#' **Geographic Pattern**: Male advantages are scattered across regions
+#' without clear clustering, suggesting country-specific rather than
+#' regional factors.
+#' 
+#' ***Countries with Female Advantages***
+#' 
+#' **Minimal Female Advantages (0-5 points):**
+#' 
+#' \- **Israel through Portugal**: 15 countries showing small female
+#' advantages (0.1-4.2 points).
+#' 
+#' \- **High Performers**: Singapore, Japan, Switzerland maintain
+#' excellence while showing minimal gender gaps.
+#' 
+#' \- **Geographic Diversity**: Includes Asia-Pacific, North America, and
+#' Western Europe.
+#' 
+#' **Moderate Female Advantages (5-15 points):**
+#' 
+#' \- **Panama through Malta**: 16 countries with moderate female
+#' superiority (4.2-13.7 points).
+#' 
+#' \- **Notable Cases**: South Korea (9.8 points) and Sweden (11.4 points)
+#' show concerning male underperformance despite high overall achievement.
+#' 
+#' \- **Regional Spread**: Encompasses Eastern Europe, Nordic countries,
+#' and oil-rich nations.
+#' 
+#' **Large Female Advantages (15+ points):**
+#' 
+#' \- **Saudi Arabia, Iceland, Norway, Brunei, Slovenia, UAE, Finland,
+#' Qatar**: 8 countries with substantial female advantages (15.3-22.4
+#' points).
+#' 
+#' \- **Nordic Paradox**: Iceland, Norway, and Finland show large female
+#' advantages despite progressive gender equality reputations.
+#' 
+#' \- **Gulf States Pattern**: UAE and Qatar demonstrate significant female
+#' educational superiority.
+#' 
+#' **Regional Analysis Patterns**
+#' 
+#' ***Nordic Countries - The Equality Paradox***
+#' 
+#' **Unexpected Large Gaps**:
+#' 
+#' Despite being global leaders in gender equality, Nordic countries show
+#' substantial female educational advantages:
+#' 
+#' \- **Finland** (21.1 points): Largest gap among traditionally
+#' high-performing countries.
+#' 
+#' \- **Norway** (17.0 points): Significant female superiority.
+#' 
+#' \- **Iceland** (16.8 points): Concerning male underachievement.
+#' 
+#' \- **Sweden** (11.4 points): Moderate but growing female advantage.
+#' 
+#' **Policy Implications**: This "Nordic Paradox" suggests that societal
+#' gender equality doesn't automatically translate to educational gender
+#' parity, requiring targeted educational interventions.
+#' 
+#' ***Anglo-Saxon Countries - Mixed Results***
+#' 
+#' **Varied Patterns**: English-speaking countries show no consistent
+#' pattern:
+#' 
+#' \- **UK** (-1.2 points): Slight male advantage,
+#' 
+#' \- **Ireland** (-0.5 points): Near-parity,
+#' 
+#' \- **Australia** (+1.0 points): Minimal female advantage,
+#' 
+#' \- **New Zealand** (+2.1 points): Small female advantage,
+#' 
+#' \- **Canada** (+3.0 points): Moderate female advantage,
+#' 
+#' \- **USA** (+1.5 points): Minimal female advantage.
+#' 
+#' **System Diversity**: Suggests that shared language/culture doesn't
+#' determine gender educational patterns.
+#' 
+#' ***Continental Europe - Moderate Female Trends***
+#' 
+#' **Generally Female-Favoring**: Most Continental European countries show
+#' small to moderate female advantages:
+#' 
+#' \- **Germany, Netherlands, Belgium**: Moderate female advantages (3-6
+#' points),
+#' 
+#' \- **Eastern Europe** (Czech Republic, Poland, Estonia): Consistent
+#' female superiority (7-8 points),
+#' 
+#' \- **Southern Europe** (Spain, Portugal, Greece): Moderate female
+#' advantages (3-9 points).
+#' 
+#' ***East Asian Excellence with Gender Concerns***
+#' 
+#' \- **Singapore** (+0.9 points): Near-parity with world-leading
+#' performance,
+#' 
+#' \- **Japan** (+1.6 points): Minimal female advantage, excellent overall
+#' performance,
+#' 
+#' \- **Taiwan** (+5.3 points): Moderate female advantage,
+#' 
+#' \- **Hong Kong** (+3.2 points): Small female advantage,
+#' 
+#' \- **South Korea** (+9.8 points): Concerning male underperformance
+#' despite high achievement.
+#' 
+#' ***Gulf States - Female Educational Revolution***
+#' 
+#' **Dramatic Female Advantages**: Oil-rich nations show remarkable female
+#' educational superiority:
+#' 
+#' \- **Qatar** (22.4 points): Largest female advantage in the dataset,
+#' 
+#' \- **UAE** (20.5 points): Substantial female superiority,
+#' 
+#' \- **Saudi Arabia** (15.3 points): Significant female advantage,
+#' 
+#' \- **Brunei** (18.2 points): Large female advantage,
+#' 
+#' **Societal Transformation**: These patterns reflect rapid social changes
+#' and increased female educational investment in traditionally
+#' male-dominated societies.
+#' 
+#' ***Comparative Analysis Across Income Groups***
+#' 
+#' ***Similarities with Other Income Groups***
+#' 
+#' -   **Female Advantage Dominance**: All income groups show predominantly
+#'     female-favoring patterns (80% in high-income vs. 78% in
+#'     upper-middle, 100% in lower-middle).
+#' -   **Range Variation**: All groups show significant gap variations.
+#' -   **Regional Clustering**: Certain regional patterns appear across
+#'     income levels.
+#' 
+#' ***High-Income Distinctions***
+#' 
+#' -   **More Male Advantages**: High-income countries show more male
+#'     advantages (20%) than other groups.
+#' -   **Smaller Maximum Gaps**: Largest gap (22.4) is smaller than other
+#'     income groups.
+#' -   **Performance Paradoxes**: High achievement can coexist with
+#'     significant gender gaps.
+#' 
+#' **Educational Policy Implications**
+#' 
+#' ***For Countries with Large Female Advantages (15+ points)***
+#' 
+#' **Male Student Crisis Management**:
+#' 
+#' \- **Nordic Countries**: Need urgent male student re-engagement programs
+#' despite overall system success.
+#' 
+#' \- **Gulf States**: Should build on female success while addressing male
+#' underachievement.
+#' 
+#' \- **Comprehensive Analysis**: Understanding cultural, economic, and
+#' educational factors driving male disengagement.
+#' 
+#' ***For Near-Parity Countries***
+#' 
+#' \- **Ireland, Denmark, Israel**: Serve as models for gender equity
+#' achievement.
+#' 
+#' \- **Documentation**: Preserve successful practices preventing gender
+#' gap emergence.
+#' 
+#' \- **Continuous Monitoring**: Ensure balance maintenance during system
+#' changes.
+#' 
+#' ***For Male Advantage Countries***
+#' 
+#' **Protecting Female Progress**:
+#' 
+#' \- **Chile, Austria, Italy**: Monitor female student support while
+#' maintaining overall performance.
+#' 
+#' \- **Historical Analysis**: Understanding factors maintaining male
+#' advantages in contemporary contexts.
+#' 
+#' \- **Balanced Development**: Ensuring system improvements benefit all
+#' students.
+#' 
+#' ***Addressing the Nordic Paradox***
+#' 
+#' **Research Priority**: Understanding how countries with advanced gender
+#' equality can have large educational gender gaps requires comprehensive
+#' study of:
+#' 
+#' \- Educational methodology effects on different genders,
+#' 
+#' \- Societal expectation impacts on academic motivation,
+#' 
+#' \- Labor market signals affecting educational engagement.
+#' 
+#' ***Learning from Success Stories***
+#' 
+#' **Singapore and Japan Models**: Countries achieving high performance
+#' with gender balance should share:
+#' 
+#' \- Curriculum design approaches,
+#' 
+#' \- Teaching methodology training,
+#' 
+#' \- Student support systems,
+#' 
+#' \- Assessment strategies that engage all students equally.
+#' 
+#' ***Targeted Interventions***
+#' 
+#' **Male Student Support**: Countries with large female advantages need:
+#' 
+#' \- Early identification of male student disengagement,
+#' 
+#' \- Mentorship programs targeting male students,
+#' 
+#' \- Teaching method diversification,
+#' 
+#' \- Addressing cultural factors discouraging male academic achievement.
+#' 
+#' **Female Student Protection**: Countries with male advantages should:
+#' 
+#' \- Ensure equal opportunities and resources for female students,
+#' 
+#' \- Address potential barriers to female academic achievement,
+#' 
+#' \- Monitor for subtle discrimination or bias.
+#' 
+#' **Future Considerations**
+#' 
+#' ***Economic Development Context***
+#' 
+#' High-income countries demonstrate that wealth alone doesn't guarantee
+#' gender educational equity. The persistence of significant gaps suggests
+#' that:
+#' 
+#' \- Targeted policy interventions remain necessary regardless of economic
+#' development,
+#' 
+#' \- Cultural and social factors significantly influence educational
+#' gender patterns,
+#' 
+#' \- Continuous monitoring and adjustment of educational policies is
+#' required.
+#' 
+#' ***Global Leadership Responsibility***
+#' 
+#' As the world's most economically advanced nations, high-income countries
+#' have responsibilities to:
+#' 
+#' \- Model effective gender-equitable educational systems.
+#' 
+#' \- Share successful practices with developing nations.
+#' 
+#' \- Continue research into optimal approaches for achieving both
+#' excellence and equity.
+#' 
+#' High-income countries present a complex gender education landscape that
+#' challenges simple assumptions about the relationship between wealth,
+#' development, and gender equity. The "Nordic Paradox" particularly
+#' highlights that societal gender equality doesn't automatically translate
+#' to educational gender parity.
+#' 
+#' The key insight is that achieving both educational excellence and gender
+#' equity requires deliberate, sustained policy attention regardless of
+#' economic development level. Countries like Singapore and Japan
+#' demonstrate that this balance is achievable, while cases like Finland
+#' and Qatar show that excellence in one area doesn't guarantee success in
+#' another.
+#' 
+#' Success requires moving beyond assumptions to understand
+#' context-specific factors driving gender educational patterns,
+#' implementing targeted interventions where needed, and maintaining
+#' continuous monitoring to ensure that educational progress benefits all
+#' students equitably while maintaining high achievement standards for
+#' entire populations.
+#' 
+#' ### Mathematics Gender Gap Analysis: High Income Countries in 2022
+#' 
+#' Analysis based on PISA 2022 weighted mean scores for mathematics across
+#' 46 participating countries and territories.
+#' 
+#' Gender gap calculated as male score minus female score, where negative
+#' values indicate male advantage and positive values indicate female
+#' advantage.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-school-high-countries-math, message=FALSE, warning=FALSE-----------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Standardize gender, filter for valid data (High income, valid gender, valid score, 2022)
+gender_gap <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2022,
+    world_bank_income_group == "High income"
+  )
+
+# 2. Calculate weighted mean score by country and gender
+wm_gender <- gender_gap %>%
+  group_by(country, gender, country_name) %>%
+  summarise(
+    weighted_mean_math_score = weighted.mean(math, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# 3. Pivot wider and compute gender gap (female - male)
+wm_gender_wide <- wm_gender %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_math_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+# 4. Sort by gender gap and set country order for plotting
+wm_gender_wide <- wm_gender_wide %>%
+  arrange(gender_gap) %>%
+  mutate(country_name = forcats::fct_inorder(country_name))
+
+# 5. Plot
+ggplot(wm_gender_wide, aes(x = country_name)) +
+  geom_point(aes(y = male, color = "Male"), size = 3, shape = 16) +
+  geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
+  geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
+  labs(
+    title = "2022 Weighted Mean Math Score by Gender \n (High income countries)",
+    x = "Countries",
+    y = "Weighted Mean Math Score",
+    color = "Gender"
+  ) +
+  scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold")
+  )
+
+
+#' 
+#' The PISA 2022 mathematics assessment reveals persistent but varying
+#' gender disparities across 46 countries and territories. While males
+#' outperform females in the majority of participating regions, the
+#' magnitude of these differences varies significantly, and notably,
+#' several countries show female advantages or gender parity.
+#' 
+#' **Overall Gender Pattern**
+#' 
+#' -   **Male advantage**: 40 out of 46 countries (87%) show males
+#'     outperforming females
+#' 
+#' -   **Female advantage**: 4 countries show females outperforming males
+#' 
+#' -   **Near parity**: 2 countries show minimal gender differences (\< 1
+#'     point)
+#' 
+#' **Magnitude of Gender Gaps**
+#' 
+#' ***Largest Male Advantages (\>15 points):***
+#' 
+#' -   Italy: 22.6-point gap (largest overall)
+#' 
+#' -   Austria: 18.7 points
+#' 
+#' -   Chile: 17.4 points
+#' 
+#' -   Macao, China: 16.3 points
+#' 
+#' -   Israel: 15.4 points
+#' 
+#' -   United Kingdom: 15.3 points
+#' 
+#' ***Countries with Female Advantages:***
+#' 
+#' -   Brunei Darussalam: +11.9 points (largest female advantage)
+#' 
+#' -   Qatar: +6.9 points
+#' 
+#' -   United Arab Emirates: +3.9 points
+#' 
+#' -   Slovenia: +3.3 points
+#' 
+#' **Near Gender Parity:**
+#' 
+#' -   Slovakia: 0.16-point difference
+#' 
+#' -   Norway: 0.78-point difference
+#' 
+#' **Regional and Cultural Patterns**
+#' 
+#' ***High-Performing Asian Countries:***
+#' 
+#' -   Show moderate male advantages despite high overall scores
+#' 
+#' -   Singapore (569F/582M), Taiwan (544F/551M), Japan (533F/541M)
+#' 
+#' -   Hong Kong shows smaller gap (536F/545M)
+#' 
+#' ***European Countries:***
+#' 
+#' -   Generally show male advantages ranging from 4-19 points
+#' 
+#' -   Nordic countries show smaller gaps: Finland (+2.7F), Sweden (-4.5),
+#'     Norway (-0.8)
+#' 
+#' -   Southern/Mediterranean Europe shows larger gaps: Italy (-22.6),
+#'     Greece (-7.5)
+#' 
+#' ***English-Speaking Countries:***
+#' 
+#' -   All show male advantages: UK (-15.3), Canada (-14.3), Australia
+#'     (-13.0), USA (-11.7), Ireland (-12.8), New Zealand (-14.2)
+#' 
+#' ***Gulf States:***
+#' 
+#' -   Mixed pattern: UAE and Qatar favor females, while Saudi Arabia shows
+#'     male advantage
+#' 
+#' **Countries with Smallest Achievement Gaps**
+#' 
+#' Regardless of direction, these countries show the most equitable gender
+#' performance:
+#' 
+#' 1.  Slovakia: 0.16 points
+#' 
+#' 2.  Norway: 0.78 points
+#' 
+#' 3.  Finland: 2.66 points
+#' 
+#' 4.  Slovenia: 3.30 points
+#' 
+#' 5.  UAE: 3.93 points
+#' 
+#' **Implications and Considerations**
+#' 
+#' ***Educational Equity***
+#' 
+#' The data suggests that while male mathematical advantages persist
+#' globally, they are not universal or inevitable. Countries like Finland,
+#' Slovenia, Qatar, UAE, and Brunei demonstrate that female mathematical
+#' performance can equal or exceed male performance.
+#' 
+#' ***Cultural and Systemic Factors***
+#' 
+#' The variation in gender gaps across countries with similar economic
+#' development levels suggests that cultural attitudes, educational
+#' practices, and systemic factors play significant roles in shaping gender
+#' differences in mathematical achievement.
+#' 
+#' ***High Achievement with Equity***
+#' 
+#' Several high-performing countries (Singapore, Taiwan, Hong Kong, Japan)
+#' maintain strong overall performance while working toward gender equity,
+#' suggesting that closing gender gaps need not compromise overall
+#' educational excellence.
+#' 
+#' **Progressive Gender Equity by Income Level:**
+#' 
+#' 1.  **High-income countries**: 87% male advantage
+#' 
+#' 2.  **Upper-middle income countries**: 48% male advantage, 43% female
+#'     advantage
+#' 
+#' 3.  **Lower-middle income countries**: 40% male advantage, 60% female
+#'     advantage
+#' 
+#' **Key Observations:**
+#' 
+#' -   **Inverse relationship**: Lower income correlates with greater
+#'     female mathematical advantages.
+#' 
+#' -   **Educational transitions**: May reflect different stages of
+#'     educational development and gender equity policies.
+#' 
+#' -   **Cultural factors**: Regional patterns persist across income levels
+#'     but are modified by economic context.
+#' 
+#' ### UNICEF Gender Parity Index vs PISA Gender Gap Analysis
+#' 
+#' This analysis is based on UNICEF Gender Parity Index for secondary
+#' education (2018) plotted against PISA 2018 gender gaps across 67
+#' countries. Gender gaps calculated as female score minus male score,
+#' where positive values indicate female advantages.\
+#' \
+#' Countries classified by World Bank income groups and color-coded
+#' accordingly. The year 2018 was chosen in order to have the most data
+#' possible.
+#' 
+## ----PISA-data-exploration-boys-vs-girls-parity-index, fig.height=14, fig.width=12, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# Prepare your gender performance gap for 2018
+# Calculate weighted mean PISA score gap by gender, per country, for 2018
+gender_gap_2018 <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(avg_score),
+    !is.na(stu_wgt),
+    year == 2018
+  ) %>%
+  group_by(country, gender, country_name, world_bank_income_group) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(avg_score, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+#Prepare the UNICEF gender parity index for 2018, secondary school
+
+gender_index_sec_2018 <- gender_index %>%
+  filter(
+    year == 2018,
+    tolower(school_level) == "secondary",
+    !is.na(gender_parity_index)
+  ) %>%
+  select(country, gender_parity_index)
+
+# Merge the two datasets
+gap_vs_index <- gender_gap_2018 %>%
+  left_join(
+    gender_index_sec_2018,
+    by = "country"
+  ) %>%
+  filter(!is.na(gender_parity_index)) # Keep only countries with available index
+  
+#Visualize the relationship
+
+# Define ymin and ymax for the background shading
+ymin <- min(-10, min(gap_vs_index$gender_gap, na.rm = TRUE))
+ymax <- max(gap_vs_index$gender_gap, na.rm = TRUE)
+
+ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = country_name)) +
+  # Blue zone for y < 0 (boys > girls)
+  annotate("rect",
+           xmin = -Inf, xmax = Inf, ymin = ymin, ymax = 0,
+           fill = "#a4c6f2", alpha = 0.13) +
+  # Pink zone for y > 0 (girls > boys)
+  annotate("rect",
+           xmin = -Inf, xmax = Inf, ymin = 0, ymax = ymax,
+           fill = "#f8bbd0", alpha = 0.13) +
+  # Gray rectangle for parity zone [0.97, 1.03]
+  annotate("rect",
+           xmin = 0.97, xmax = 1.03, ymin = -Inf, ymax = Inf,
+           alpha = 0.15, fill = "grey50") +
+  # Vertical dashed lines for the parity bounds
+  geom_vline(xintercept = c(0.97, 1.03), linetype = "dashed", color = "grey30") +
+  # Scatter points, colored by income group
+  geom_point(aes(color = world_bank_income_group), size = 3) +
+  # Regression line
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "solid") +
+  # Country names
+  geom_text_repel(
+  size = 3,
+  box.padding = 0.25,
+  max.overlaps = 50 # augmente ce nombre si besoin
+)+
+  # Adjust axes
+  scale_x_continuous(
+    name = "UNICEF Gender Parity Index (Secondary, 2018)",
+    breaks = seq(0.90, 1.15, by = 0.05)
+  ) +
+  coord_cartesian(ylim = c(-10, max(gap_vs_index$gender_gap, na.rm = TRUE))) +
+  # Titles, subtitle, legend, and long caption
+  labs(
+    title = "Relation between Gender Parity Index (UNICEF) and PISA Gender Score Gap (2018, Secondary School)",
+    subtitle = "Each point is a country. Color indicates World Bank income group.",
+    x = "UNICEF Gender Parity Index (Secondary, 2018)\n  below 1 there are less girls than boys, abose 1 there are more boys than girls int he secondary",
+    y = "PISA Gender Performance Gap (Girls - Boys, 2018)\n when the number is positive the girls overperform the boys",
+    color = "Income Group",
+    caption = paste(
+      "Note:",
+      "At 0.90 gender parity index, there are 90 girls studying in secondary for every 100 boys.\n",
+      "Between 0.97 and 1.03 (grey band), it is considered that there is parity between boys and girls.\n",
+      "Below 1, more boys than girls; above 1, more girls than boys in secondary school.\n",
+      "A gender gap of +10 means girls outperform boys by 10 points on average; negative values mean boys score higher.\n"
+    )
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(size = 10, hjust = 0)
+  )
+
+
+#' 
+#' The relationship between UNICEF's Gender Parity Index (GPI) for
+#' secondary education and PISA gender gaps reveals a compelling paradox:
+#' countries with higher overall gender parity in education often exhibit
+#' larger gender gaps favoring females performance. This inverse
+#' correlation challenges conventional assumptions about educational equity
+#' and suggests complex dynamics in gender-differentiated academic
+#' achievement.
+#' 
+#' **Overall Correlation Pattern**
+#' 
+#' -   **Negative correlation**: As UNICEF Gender Parity Index increases
+#'     (approaching perfect parity at 1.0), PISA gender gaps tend to favor
+#'     females more strongly.
+#' 
+#' -   **Trend line**: Clear downward slope indicating that greater
+#'     educational gender parity correlates with larger female advantages.
+#' 
+#' -   **R-squared implications**: The relationship is statistically
+#'     significant but with considerable variation, suggesting multiple
+#'     factors influence this dynamic.
+#' 
+#' **Implications and Interpretations**
+#' 
+#' **The Gender Parity Paradox**
+#' 
+#' The inverse correlation suggests several possible explanations:
+#' 
+#' 1.  **Selection Effects**: In countries with lower overall gender
+#'     parity, only the most capable/motivated female students may access
+#'     secondary education, leading to higher average performance.
+#' 
+#' 2.  **Educational Quality vs. Access**: Countries achieving gender
+#'     parity in access may still have qualitative differences in how
+#'     education affects male and female students.
+#' 
+#' 3.  **Cultural Transitions**: Societies transitioning toward gender
+#'     equity may experience periods where female academic motivation and
+#'     achievement exceed male performance.
+#' 
+#' 4.  **Policy Implementation**: Educational policies promoting gender
+#'     equity may have differential effects on academic performance.
+#' 
+#' **Regional and Cultural Factors**
+#' 
+#' **Middle Eastern Pattern**: Saudi Arabia's position suggests that even
+#' in contexts with traditional gender limitations, female students who do
+#' access education may significantly outperform male peers in mathematics.
+#' 
+#' **Nordic Excellence**: Finland demonstrates that high gender parity and
+#' female excellence can coexist, representing a potential model for
+#' optimal outcomes.
+#' 
+#' **Development Transitions**: The distribution suggests that countries at
+#' different stages of gender equity development may experience different
+#' patterns of academic achievement.
+#' 
+#' **Policy Implications**
+#' 
+#' **For Educational Planners**
+#' 
+#' 1.  **Beyond Access**: Achieving gender parity in enrollment doesn't
+#'     automatically ensure equitable academic outcomes.
+#' 
+#' 2.  **Subject-Specific Interventions**: Academic achievement patterns
+#'     may require targeted approaches beyond general gender equity
+#'     policies.
+#' 
+#' 3.  **Cultural Context Matters**: One-size-fits-all approaches may not
+#'     account for complex local dynamics.
+#' 
+#' **For International Development**
+#' 
+#' 1.  **Nuanced Metrics**: Simple parity indices may not capture the full
+#'     picture of educational gender equity.
+#' 
+#' 2.  **Quality and Outcomes**: Focus should extend beyond access to
+#'     include academic achievement patterns.
+#' 
+#' 3.  **Unexpected Success Stories**: Countries with lower overall parity
+#'     indices may still achieve remarkable outcomes in specific areas.
+#' 
+#' **Data Limitations**
+#' 
+#' -   **Participation bias**: PISA results only reflect students who
+#'     remain in school through age 15.
+#' 
+#' -   **Country selection**: Not all countries participate in both UNICEF
+#'     monitoring and PISA assessments.
+#' 
+#' -   **Temporal selection**: Having chosen 2018 in order to have the most
+#'     UNICEF data may not represents the most up to date situation.
+#' 
+#' ### UNICEF Gender Parity Index vs PISA Mathematics Gender Gap Analysis
+#' 
+## ----PISA-data-exploration-boys-vs-girls-parity-index-math, fig.height=14, fig.width=12, message=FALSE, warning=FALSE----
+knitr::opts_chunk$set(echo=FALSE)
+
+# Prepare your gender performance gap for 2018
+# Calculate weighted mean PISA score gap by gender, per country, for 2018
+gender_gap_2018 <- student %>%
+  mutate(
+    gender = tolower(trimws(gender))
+  ) %>%
+  filter(
+    gender %in% c("male", "female"),
+    !is.na(math),
+    !is.na(stu_wgt),
+    year == 2018
+  ) %>%
+  group_by(country, gender, country_name, world_bank_income_group) %>%
+  summarise(
+    weighted_mean_score = weighted.mean(math, stu_wgt, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  pivot_wider(
+    names_from = gender,
+    values_from = weighted_mean_score
+  ) %>%
+  filter(!is.na(male), !is.na(female)) %>%
+  mutate(
+    gender_gap = female - male # Positive: girls score higher
+  )
+
+#Prepare the UNICEF gender parity index for 2018, secondary school
+
+gender_index_sec_2018 <- gender_index %>%
+  filter(
+    year == 2018,
+    tolower(school_level) == "secondary",
+    !is.na(gender_parity_index)
+  ) %>%
+  select(country, gender_parity_index)
+
+# Merge the two datasets
+gap_vs_index <- gender_gap_2018 %>%
+  left_join(
+    gender_index_sec_2018,
+    by = "country"
+  ) %>%
+  filter(!is.na(gender_parity_index)) # Keep only countries with available index
+  
+#Visualize the relationship
+
+# Define ymin and ymax for the background shading
+ymin <- min(-25, min(gap_vs_index$gender_gap, na.rm = TRUE))
+ymax <- max(gap_vs_index$gender_gap, na.rm = TRUE)
+
+ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = country_name)) +
+  # Blue zone for y < 0 (boys > girls)
+  annotate("rect",
+           xmin = -Inf, xmax = Inf, ymin = ymin, ymax = 0,
+           fill = "#a4c6f2", alpha = 0.13) +
+  # Pink zone for y > 0 (girls > boys)
+  annotate("rect",
+           xmin = -Inf, xmax = Inf, ymin = 0, ymax = ymax,
+           fill = "#f8bbd0", alpha = 0.13) +
+  # Gray rectangle for parity zone [0.97, 1.03]
+  annotate("rect",
+           xmin = 0.97, xmax = 1.03, ymin = -Inf, ymax = Inf,
+           alpha = 0.15, fill = "grey50") +
+  # Vertical dashed lines for the parity bounds
+  geom_vline(xintercept = c(0.97, 1.03), linetype = "dashed", color = "grey30") +
+  # Scatter points, colored by income group
+  geom_point(aes(color = world_bank_income_group), size = 3) +
+  # Regression line
+  geom_smooth(method = "lm", se = FALSE, color = "black", linetype = "solid") +
+  # Country names
+  geom_text_repel(
+  size = 3,
+  box.padding = 0.25,
+  max.overlaps = 50 # augmente ce nombre si besoin
+)+
+  # Adjust axes
+  scale_x_continuous(
+    name = "UNICEF Gender Parity Index (Secondary, 2018)",
+    breaks = seq(0.90, 1.15, by = 0.05)
+  ) +
+  coord_cartesian(ylim = c(-25, max(gap_vs_index$gender_gap, na.rm = TRUE))) +
+  # Titles, subtitle, legend, and long caption
+  labs(
+    title = "Relation between Gender Parity Index (UNICEF) and PISA Gender Math Score Gap (2018, Secondary School)",
+    subtitle = "Each point is a country. Color indicates World Bank income group.",
+    x = "UNICEF Gender Parity Index (Secondary, 2018)\n  below 1 there are less girls than boys, abose 1 there are more boys than girls int he secondary",
+    y = "PISA Math Gender Performance Gap (Girls - Boys, 2018)\n when the number is positive the girls overperform the boys",
+    color = "Income Group",
+    caption = paste(
+      "Note:",
+      "At 0.90 gender parity index, there are 90 girls studying in secondary for every 100 boys.\n",
+      "Between 0.97 and 1.03 (grey band), it is considered that there is parity between boys and girls.\n",
+      "Below 1, more boys than girls; above 1, more girls than boys in secondary school.\n",
+      "A gender gap of +10 means girls outperform boys by 10 points on average; negative values mean boys score higher.\n"
+    )
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold"),
+    plot.caption = element_text(size = 10, hjust = 0)
+  )
+
+
+
+#' 
+#' **Weak Overall Correlation**: Unlike the previous analysis of average
+#' PISA performance across all subjects, the relationship between gender
+#' parity in education enrollment and math performance gaps is much weaker
+#' and less consistent. The trend line shows only a slight negative slope,
+#' suggesting minimal correlation.
+#' 
+#' **Math-Specific Gender Dynamics**: The math results reveal different
+#' patterns compared to overall PISA performance:
+#' 
+#' -   Many countries show boys outperforming girls in math (negative
+#'     gender gaps), which is consistent with well-documented international
+#'     trends in mathematics achievement.
+#' 
+#' -   The gender gaps in math are generally smaller than what we might
+#'     have seen in the overall PISA averages.
+#' 
+#' **Notable Outliers and Patterns**:
+#' 
+#' -   **Thailand** stands out dramatically with girls significantly
+#'     outperforming boys in math (gap of +17.3 points) while having high
+#'     gender parity in enrollment.
+#' 
+#' -   **Philippines** and **Indonesia** also show girls outperforming boys
+#'     in math, despite being lower-middle income countries.
+#' 
+#' -   **Saudi Arabia** presents an interesting case with girls
+#'     outperforming boys in math (+12.9 points) but having lower gender
+#'     parity in enrollment (0.94).
+#' 
+#' **Income Group Variations**:
+#' 
+#' -   **High-income countries** (red dots) cluster around the zero line,
+#'     suggesting more gender-balanced math performance.
+#' 
+#' -   **Upper-middle income countries** (blue dots) show the widest
+#'     variation, from Colombia's -20 point gap favoring boys to Thailand's
+#'     +17 point gap favoring girls.
+#' 
+#' -   **Lower-middle income countries** (green dots) are limited but show
+#'     interesting patterns, with two out of three showing girls
+#'     outperforming boys.
+#' 
+#' **Regional Considerations**: European countries tend to cluster near
+#' zero gender gaps with high enrollment parity, while Latin American
+#' countries show more variation, particularly with boys outperforming
+#' girls in countries like Colombia, Peru, and Argentina.
+#' 
+#' The weak correlation suggests that gender parity in school enrollment
+#' doesn't strongly predict math performance gaps, indicating that other
+#' factors; cultural attitudes toward mathematics, teaching methods,
+#' stereotype threat, or curriculum differences, may play more significant
+#' roles in determining gender-specific math achievement patterns.
+#' 
+#' # Modelling
+#' 
+#' ## Introduction to Modeling
+#' 
+#' Following the exploratory data analysis, the next step is to develop
+#' predictive models for individual student PISA average scores. PISA
+#' scores typically range from 200 to 800, as a result, the expected Root
+#' Mean Squared Error (RMSE) in this context will be much higher and should
+#' be interpreted relative to the scale of the data.
+#' 
+#' For this project, model performance is primarily evaluated in comparison
+#' to a baseline model that predicts the mean training set score for all
+#' students. The effectiveness of more advanced models is measured by their
+#' ability to reduce the RMSE relative to this baseline.
+#' 
+#' ## Performance metric: RMSE
+#' 
+#' Model accuracy is assessed using the Root Mean Squared Error (RMSE),
+#' which is a standard evaluation metric for regression tasks.
+#' 
+#' RMSE quantifies the average magnitude of the prediction errors,
+#' expressing them in the same units as the target variable. The formula is
+#' given by:
+#' 
+#' $$
+#' \text{RMSE} = \sqrt{ \frac{1}{N} \sum_{i=1} \left( \hat{y}_{i} - y_{i} \right)^2 }
+#' $$ where:
+#' 
+#' $N$ is the total number of predictions,
+#' 
+#' $y_i$ is the observed PISA score for student $i$,
+#' 
+#' $\hat{y}_i$ is the predicted PISA score for student $i$.
+#' 
+#' A lower RMSE indicates that the model's predictions are closer to the
+#' actual student scores, reflecting better predictive performance.
+#' 
+#' ## Train/Test Split Methodology
+#' 
+#' To ensure the validity and robustness of the predictive models, the
+#' dataset was partitioned into a training set and a final hold-out test
+#' set. This methodology closely mirrors best practices in machine
+#' learning, enabling a realistic evaluation of model performance on truly
+#' unseen data.
+#' 
+#' Specifically, 10% of the dataset was randomly selected to constitute the
+#' hold-out test set, while the remaining 90% was used for model training
+#' and validation.
+#' 
+#' To prevent data leakage and guarantee a fair evaluation, the split was
+#' performed such that all key identifiers present in the test set (for
+#' instance, school IDs for the school dataset or school IDs within the
+#' student dataset) also appeared in the training set. Any observations in
+#' the test set associated with identifiers not found in the training set
+#' were reassigned to the training set.
+#' 
+#' This procedure ensures that the models are not evaluated on data from
+#' entirely new schools or other grouping variables absent from the
+#' training data, thereby reflecting real-world scenarios where predictions
+#' are made for similar, but not completely novel, populations.
+#' 
+#' Given computational constraints associated with the dataset size, model
+#' training and evaluation were carried out solely on data from the 2022
+#' PISA cycle.
+#' 
+## ----PISA-dataset-create-initial-database, message=FALSE, warning=FALSE-------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# 1. Filer the years 2018 et 2022
+student_sub <- student %>%
+  filter(year %in% c(2022))
+
+# 2. Select school columns
+school_sub <- school %>%
+  select(
+    school_uid,
+    enrol_boys,
+    enrol_girls,
+    stratio,
+    public_private,
+    staff_shortage,
+    fund_gov,
+    school_size
+  )
+
+# 3. Joint school and student
+student_enriched <- student_sub %>%
+  left_join(school_sub, by = "school_uid")
+
+# 4. Add GDP per country 
+student_enriched <- student_enriched %>%
+  left_join(gdp_perppp %>% select(country, GDP_per_PPP_2022), by = "country")
+
+# 5. Add gender index 
+gender_index_secondary <- gender_index %>%
+  filter(school_level == "Secondary", !is.na(gender_parity_index)) %>%
+  group_by(country) %>%
+  slice_max(order_by = year, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(country, gender_parity_index, year) 
+
+# Ensuite merge comme avant
+student_enriched <- student_enriched %>%
+  left_join(gender_index_secondary %>% select(country, gender_parity_index), by = "country")
+
+# Check
+glimpse(student_enriched)
+
+#' 
+#' ## Understanding the academic performance correlations
+#' 
+## ----PISA-dataset-correlations, message=FALSE, warning=FALSE------------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+num_vars <- student_enriched %>%
+  select("avg_score", "escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index") %>%
+  filter(complete.cases(.))
+
+cor_matrix <- cor(num_vars)
+# Renamme for better lisibility
+colnames(cor_matrix) <- rownames(cor_matrix) <- c(
+  "PISA Score",
+  "ESCS",
+  "Staff Shortage",
+  "Government Funding (%)",
+  "School Size",
+  "Student-Teacher Ratio",
+  "GDP per capita (PPP)",
+  "Gender Parity Index"
+)
+corrplot(
+  cor_matrix,
+  method = "color",
+  type = "upper",
+  addCoef.col = "black",
+  col = colorRampPalette(c("red", "white", "green"))(200),
+  tl.cex = 0.8,
+  number.cex = 0.6,
+  cl.cex = 0.8,
+  mar = c(0,0,1,0)
+)
+
+#' 
+#' **Socioeconomic Status as the Primary Predictor**
+#' 
+#' **ESCS (Economic, Social, Cultural Status)**: Shows the strongest
+#' correlation with PISA scores at **0.46**, confirming it as the most
+#' powerful predictor of academic achievement. This demonstrates that the
+#' combination of economic resources, parental education, and cultural
+#' capital has a substantial impact on student performance.
+#' 
+#' **School Resource and Structure Variables**
+#' 
+#' **Student-Teacher Ratio**: Shows a notable negative correlation of
+#' **-0.18** with PISA scores, indicating that lower student-teacher ratios
+#' (smaller class sizes) are associated with better academic performance.
+#' This is one of the stronger school-level predictors.
+#' 
+#' **Staff Shortage**: Displays a negative correlation of **-0.16** with
+#' performance, showing that schools with more adequate staffing tend to
+#' have better student outcomes.
+#' 
+#' **School Size**: Shows a very weak positive correlation of **0.05**,
+#' suggesting that school size has minimal impact on performance.
+#' 
+#' **Government Funding Percentage**: Exhibits a weak negative correlation
+#' of **-0.04**, indicating a slight tendency for higher government funding
+#' proportions to be associated with lower performance, though this
+#' relationship is quite minimal.
+#' 
+#' **National Economic Context**
+#' 
+#' **GDP per capita (PPP)**: Shows a substantial positive correlation of
+#' **0.37** with PISA scores, demonstrating that national economic
+#' prosperity has a meaningful association with educational outcomes,
+#' though still weaker than individual socioeconomic factors.
+#' 
+#' **Gender Parity - A Surprising Finding**
+#' 
+#' **Gender Parity Index**: Shows a negative correlation of **-0.18** with
+#' PISA scores. This is counterintuitive and suggests that countries with
+#' higher gender parity in enrollment tend to have slightly lower overall
+#' PISA scores. This might reflect that countries still working toward
+#' gender parity may be dealing with other systemic educational challenges,
+#' or it could indicate trade-offs in educational resource allocation.
+#' 
+#' **Key Insights**
+#' 
+#' The hierarchy of influence on PISA scores appears to be:
+#' 
+#' 1.  **ESCS (0.46)** : Individual socioeconomic status
+#' 
+#' 2.  **GDP per capita (0.37)** : National economic conditions
+#' 
+#' 3.  **Student-Teacher Ratio (-0.18)** : Class size effects
+#' 
+#' 4.  **Gender Parity Index (-0.18)** : Enrollment equity (negative
+#'     association)
+#' 
+#' 5.  **Staff Shortage (-0.16)** : Staffing adequacy
+#' 
+#' The analysis confirms that while individual socioeconomic background
+#' remains the strongest predictor, school-level factors like class size
+#' and staffing do matter meaningfully for educational outcomes.
+#' 
+## ----PISA-dataset-train-split-test, message=FALSE, warning=FALSE--------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+set.seed(1, sample.kind = "Rounding") # pour la reproductibilité
+
+# 1. Creation of a test index (10% of students)
+test_index <- createDataPartition(y = student_enriched$school_uid, times = 1, p = 0.1, list = FALSE)
+
+student_train <- student_enriched[-test_index, ]
+temp <- student_enriched[test_index, ]
+
+# 2. Safety: Keep in the test only students whose school also exists on the train
+student_test <- temp %>%
+  semi_join(student_train, by = "school_uid")
+
+# 3. If students are excluded from the test because of a school not being on the train, they are put back on the train.
+removed <- anti_join(temp, student_test)
+student_train <- bind_rows(student_train, removed)
+
+# 4. Useful checks
+cat("Number of unique school_uid in train:", n_distinct(student_train$school_uid), "\n")
+cat("Number of unique school_uid in test:", n_distinct(student_test$school_uid), "\n")
+cat("All test schools are in train:", all(unique(student_test$school_uid) %in% unique(student_train$school_uid)), "\n")
+cat("Number of students in train:", nrow(student_train), "\n")
+cat("Number of students in test:", nrow(student_test), "\n")
+
+#' 
+#' After the train/test split, the training set contains all schools
+#' necessary for model development, while the test set includes only those
+#' schools present in the training set.
+#' 
+#' The number of unique school identifiers in each set may differ, as not
+#' every school is represented in both sets. However, it is guaranteed that
+#' every school appearing in the test set is also present in the training
+#' set, in line with best practices for predictive modeling and fair model
+#' evaluation.
+#' 
+#' ## Naive base line approach
+#' 
+#' A naive baseline is first established for model evaluation. In this
+#' approach, the mean score from the training set is used as the predicted
+#' value for every student in the test set, regardless of individual
+#' characteristics. The resulting Root Mean Squared Error (RMSE) provides a
+#' reference value, allowing subsequent models to be assessed in terms of
+#' their incremental predictive accuracy. The baseline RMSE for this
+#' project is calculated by predicting the mean PISA score from the
+#' training set for every student in the test set. This approach does not
+#' use any explanatory variables and serves as a reference point for
+#' assessing the performance of more advanced predictive models.
+#' 
+#' Given that PISA scores typically range from 200 to 800, a much higher
+#' RMSE is expected compared to rating prediction tasks on scales from 1 to
+#' 5 (such as MovieLens). In this context, model performance is best
+#' interpreted relative to the baseline RMSE, rather than any absolute
+#' threshold.
+#' 
+## ----PISA-dataset-naive-base, message=FALSE, warning=FALSE--------------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+baseline_pred <- mean(student_train$avg_score)
+rmse_baseline <- RMSE(rep(baseline_pred, nrow(student_test)), student_test$avg_score)
+cat("Baseline RMSE:", rmse_baseline, "\n")
+
+
+#' 
+#' After establishing a baseline RMSE of 100.87, subsequent predictive
+#' models are trained and evaluated.
+#' 
+#' ## Predictive Model Benchmarking
+#' 
+#' **Baseline (Mean Prediction)**
+#' 
+#' As a first step, a simple baseline model was established by predicting
+#' the average score of the training set for all students in the test set.
+#' This naïve approach serves as a reference point, enabling a meaningful
+#' comparison with more sophisticated models. It is particularly useful to
+#' understand the minimum level of accuracy that any predictive model
+#' should exceed.
+#' 
+#' **Linear Regression**
+#' 
+#' Linear regression was selected as a classic statistical modeling
+#' technique, enabling the estimation of the relationship between student
+#' performance and various explanatory variables. It is interpretable and
+#' computationally efficient, providing a benchmark for more complex
+#' algorithms. Linear regression helps to identify linear associations and
+#' gives an initial indication of predictive power based on the available
+#' features.
+#' 
+#' **Ranger (Efficient Random Forest)**
+#' 
+#' Given the large sample size, the ranger package; a fast implementation
+#' of random forest, was used to fit an ensemble tree-based model. Random
+#' forests are robust to overfitting, handle nonlinearities and complex
+#' feature interactions, and provide variable importance measures. However,
+#' the classic randomForest package could not be used due to memory
+#' constraints; thus, ranger was chosen for its efficiency and scalability.
+#' 
+#' **XGBoost**
+#' 
+#' XGBoost, a state-of-the-art gradient boosting algorithm, was implemented
+#' for its strong track record in predictive modeling competitions and its
+#' ability to capture complex nonlinear patterns. XGBoost is highly
+#' flexible and effective at handling large-scale structured data. It is
+#' particularly useful for tabular data with both numerical and categorical
+#' variables.
+#' 
+## ----PISA-dataset-predictive-models, message=FALSE, warning=FALSE-------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+## List of factor or character columns with a single level
+which(sapply(student_train, function(x) is.factor(x) && length(unique(x[!is.na(x)])) < 2))
+
+# Delete all factor columns with a single level
+one_level_factors <- sapply(student_train, function(x) is.factor(x) && length(unique(x[!is.na(x)])) < 2)
+student_train <- student_train[ , !one_level_factors]
+student_test  <- student_test[ , !one_level_factors]
+
+# Remove columns with a single level or all NA in the train
+valid_cols <- sapply(student_train, function(x)
+  !(is.factor(x) && length(unique(x[!is.na(x)])) < 2) && !all(is.na(x))
+)
+student_train <- student_train[, valid_cols]
+student_test  <- student_test[, valid_cols]
+
+vars_to_use <- c("avg_score", "escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index")
+student_train2 <- student_train %>%
+  select(any_of(vars_to_use)) %>%
+  filter(complete.cases(.)) # enlève les lignes avec NA
+
+student_test2 <- student_test %>%
+  select(any_of(vars_to_use)) %>%
+  filter(complete.cases(.))
+
+# Linear Regression
+fit_lm <- lm(avg_score ~ ., data = student_train2)
+pred_lm <- predict(fit_lm, newdata = student_test2)
+rmse_lm <- RMSE(pred_lm, student_test2$avg_score)
+
+
+# Ranger Random Forest as it was not possible to launch Random Forest due to the RAM consumption
+
+fit_ranger <- ranger(avg_score ~ ., data = student_train2, num.trees = 100)
+pred_ranger <- predict(fit_ranger, data = student_test2)$predictions
+rmse_ranger <- RMSE(pred_ranger, student_test2$avg_score)
+cat("Ranger RMSE:", rmse_ranger, "\n")
+
+
+# Assume "avg_score" is the target, all other columns are predictor variables
+# Use only numeric columns without NA
+
+predictors <- c("escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index")
+student_train2 <- student_train %>%
+  select(all_of(c("avg_score", predictors))) %>%
+  filter(complete.cases(.))
+student_test2 <- student_test %>%
+  select(all_of(c("avg_score", predictors))) %>%
+  filter(complete.cases(.))
+
+# Convert to matrices
+xgb_train <- as.matrix(student_train2 %>% select(-avg_score))
+y_train <- student_train2$avg_score
+xgb_test <- as.matrix(student_test2 %>% select(-avg_score))
+y_test <- student_test2$avg_score
+
+# Fit XGBoost
+fit_xgb <- xgboost(
+  data = xgb_train,
+  label = y_train,
+  nrounds = 100,
+  objective = "reg:squarederror",
+  verbose = 0
+)
+
+# Predict
+pred_xgb <- predict(fit_xgb, newdata = xgb_test)
+rmse_xgb <- RMSE(pred_xgb, y_test)
+cat("XGBoost RMSE:", rmse_xgb, "\n")
+
+# Summary table
+results <- data.frame(
+  Model = c("Baseline (Mean)", "Linear Regression", "Ranger (Random Forest)", "XGBoost"),
+  RMSE = c(rmse_baseline, rmse_lm, rmse_ranger, rmse_xgb)
+)
+print(results)
+
+
+#' 
+#' The table above summarizes the predictive performance of each model, as
+#' measured by the Root Mean Squared Error (RMSE) on the test set. The
+#' baseline model, which simply predicts the mean training score for all
+#' students, has the highest RMSE. Linear regression significantly improves
+#' upon this, indicating that the selected predictors offer meaningful
+#' explanatory power.
+#' 
+#' The ranger implementation of random forest achieves the lowest RMSE
+#' (68.63), outperforming both linear regression and XGBoost. This
+#' demonstrates the strength of tree-based ensemble models in capturing
+#' nonlinearities and complex interactions present in the data. XGBoost,
+#' while slightly less accurate in this context (RMSE 71.15), still
+#' provides substantial gains over the baseline and linear regression
+#' models, confirming its effectiveness for structured data.
+#' 
+#' Overall, ensemble methods; particularly ranger, demonstrate superior
+#' predictive accuracy for modeling student performance in the PISA
+#' dataset. The choice of ranger over classic random forest was motivated
+#' by computational efficiency and memory limitations.
+#' 
+#' # Results
+#' 
+#' To objectively assess model performance, each predictive model was
+#' evaluated on the final_holdout_test set, representing 10% of the full
+#' dataset and reserved exclusively for this purpose. This approach ensures
+#' an unbiased estimation of each model’s generalization ability.
+#' 
+## ----PISA-dataset-results, message=FALSE, warning=FALSE-----------------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+# Baseline: mean prediction
+baseline_pred <- mean(student_train2$avg_score)
+pred_baseline <- rep(baseline_pred, nrow(student_test2))
+rmse_baseline <- RMSE(pred_baseline, student_test2$avg_score)
+
+# Linear regression
+pred_lm <- predict(fit_lm, newdata = student_test2)
+rmse_lm <- RMSE(pred_lm, student_test2$avg_score)
+
+# Ranger (Random Forest)
+pred_ranger <- predict(fit_ranger, data = student_test2)$predictions
+rmse_ranger <- RMSE(pred_ranger, student_test2$avg_score)
+
+# XGBoost
+pred_xgb <- predict(fit_xgb, newdata = as.matrix(student_test2 %>% select(-avg_score)))
+rmse_xgb <- RMSE(pred_xgb, student_test2$avg_score)
+
+# Results table
+results <- data.frame(
+  Model = c("Baseline (Mean)", "Linear Regression", "Ranger (Random Forest)", "XGBoost"),
+  RMSE = c(rmse_baseline, rmse_lm, rmse_ranger, rmse_xgb)
+)
+print(results)
+
+#' 
+## ----PISA-dataset-best-results, message=FALSE, warning=FALSE------------------------------------------------
+knitr::opts_chunk$set(echo=FALSE)
+
+cat(sprintf("Final RMSE on holdout test set (best model): %.3f\n", min(results$RMSE)))
+
+#' 
+#' Each model was trained on the training set and evaluated on the holdout
+#' test set, enabling a fair comparison of their predictive accuracy. The
+#' baseline model, which predicts the mean training score for all students,
+#' yielded the highest RMSE. Linear regression reduced the error
+#' considerably, while both ranger and XGBoost further improved predictive
+#' performance.
+#' 
+#' **The ranger implementation of random forest achieved the lowest RMSE
+#' (68.63)**, indicating the best generalization on unseen data among the
+#' models tested.
+#' 
+#' These results highlight the importance of using ensemble tree-based
+#' methods for educational score prediction, as they effectively capture
+#' non-linear patterns and variable interactions that simpler models may
+#' miss.
+#' 
+#' Model selection was guided by both predictive performance (RMSE) and
+#' practical considerations such as computational efficiency.
+#' 
+#' In this project, multiple predictive models were developed and evaluated
+#' to estimate individual student PISA average scores using a
+#' comprehensive, multi-source dataset. The modeling approach began with a
+#' simple baseline (mean prediction) and advanced to linear regression,
+#' ensemble tree-based methods (ranger/random forest), and gradient
+#' boosting (XGBoost).
+#' 
+#' Each modeling step led to improvements in predictive accuracy, as
+#' reflected by progressive reductions in the Root Mean Squared Error
+#' (RMSE). Among all tested approaches, the ranger implementation of random
+#' forest achieved the best predictive performance on the holdout test set
+#' (RMSE = 68.63), outperforming both linear regression and XGBoost. These
+#' results underscore the value of ensemble learning methods for
+#' educational data, particularly in capturing non-linear relationships and
+#' complex interactions among predictors.
+#' 
+#' # Conclusion
+#' 
+#' Unlike previous projects with strict target RMSE thresholds, model
+#' success in this context was measured relative to a baseline appropriate
+#' to the wider range of PISA scores.
+#' 
+#' The substantial RMSE improvement over the baseline demonstrates the
+#' added value of including socio-economic, school-level, and country-level
+#' features in predictive modeling of student achievement.
+#' 
+#' **Limitations:** Despite these positive outcomes, the analysis was
+#' limited to a single PISA cycle (2022) due to computational constraints,
+#' potentially restricting the model’s generalizability across different
+#' years.
+#' 
+#' **Future Directions:** Further improvements could involve the
+#' integration of data from multiple years, advanced imputation methods for
+#' missing values.
+#' 
+#' # Comments on the project and references
+#' 
+#' I found this project so fascinating that I am now eager to delve deeper into the intersection of children’s mental health and education. I have already begun exploring and cross-referencing data from PISA on these topics, as well as drawing on resources from the World Health Organization (WHO) and the Institute for Health Metrics and Evaluation (IHME). This multidimensional approach will allow for a more comprehensive understanding of how educational factors relate to mental health outcomes among children.
+#' 
+#' I would like to acknowledge Rafael Irizarry’s book, which served as a valuable reference throughout this project. Thanks to his Data Science courses that I completed on Harvard EdX, my skills and understanding of the subject have improved tremendously.
+#' 
+#' Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
+#' Prediction Algorithms with R (Part I)*. Self-published.
+#' <https://rafalab.dfci.harvard.edu/dsbook-part-1/>
+#' 
+#' Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
+#' Prediction Algorithms with R (Part II)*. Self-published.
+#' <https://rafalab.dfci.harvard.edu/dsbook-part-2/>
+#' 
+#' I would like also to particularly thank the authors of the learningtower dataset:
+#' 
+#'   Wang K, Yacobellis P, Siregar E, Romanes S, Fitter K,
+#'   Dalla Riva G, Cook D, Tierney N, Dingorkar P, Sai
+#'   Subramanian S, Chen G (2024). _learningtower: OECD
+#'   PISA Datasets from 2000-2022 in an Easy-to-Use
+#'   Format_. R package version 1.1.0,
+#'   https://github.com/kevinwang09/learningtower,
+#'   <https://kevinwang09.github.io/learningtower/>.
+#' 
+#' Throughout this project, I have aimed to provide clear visualizations that facilitate understanding of the data and help identify issues and biases when they arise. I also made an effort to offer step-by-step explanations in R to clarify my approach.
+#' 
+#' Additionally, I would like to mention that I used ChatGPT to assist with some of the graphs. Even with this support, it took me several hours to achieve the results I wanted,both bug-free and with clear readability. This was especially true for the visualizations in the sections:
+#' 
+#' 2.2.4 PISA Performance in Lower-Income Countries: The Socioeconomic Achievement Gap Across Time
+#' 
+#' 2.2.7 Educational investment and educational outcomes for Lower-middle Income
+#' 
+#' 2.2.21 UNICEF Gender Parity Index vs PISA Gender Gap Analysis
+#' 
+#' 
+#' Other references that I found useful and helped me to complete this
+#' project:
+#' 
+#' 1. **World Bank Open Data**
+#' 
+#' The World Bank Open Data platform provides free and comprehensive access to global development data, covering economic, social, demographic, and environmental indicators for virtually every country worldwide. It includes statistics on GDP, poverty, education, health, and more, enabling users to analyze trends, compare countries, and inform policy decisions. The database is widely used by researchers, policymakers, and organizations for cross-national and time-series analysis in fields such as education and socioeconomic development.
+#' 
+#' 2. **UNICEF European Union**
+#' The UNICEF European Union website showcases UNICEF’s work in partnership with the EU to advance children’s rights and wellbeing in Europe and globally. The site features reports, policy briefs, and data on key topics such as child protection, education, health, and gender equality. It also highlights UNICEF’s contributions to evidence-based policymaking, including data and indicators relevant to school enrollment, gender parity, and educational equity—often used in comparative studies and international assessments.
+#' 
+#' 3. **OECD**
+#' The Organisation for Economic Co-operation and Development (OECD) is a leading international organization that provides data, analysis, and policy advice to promote economic and social well-being. Its Education Directorate is responsible for initiatives like PISA (Programme for International Student Assessment), producing influential reports on educational outcomes, equity, and system performance. The OECD’s website hosts a wealth of resources, including statistics, country reports, and best practice policy recommendations relevant to education, labor markets, and public policy.
+#' 
+#' 4. **ILO Country Groupings – Concepts and Definitions**
+#' The International Labour Organization (ILO) provides official definitions, classifications, and groupings of countries and regions for use in labor statistics and international reporting. This resource explains how countries are grouped by income, region, or development status according to standardized methodologies. Such classifications ensure data comparability in international labor and social statistics, and are often referenced when segmenting countries in global education and labor market studies.
+#' 
+#' 5. “**Equity and Quality in Education: Supporting Disadvantaged Students and Schools**”
+#' By: OECD (2012)
+#' A report focused on reducing inequalities, directly using PISA data and recommendations.
+#' 
+#' 6.“**The Global Testing Culture: Shaping Education Policy, Perceptions, and Practice**”
+#' Edited by: William C. Smith & Alexander W. Wiseman (2016)
+#' Explores the effects of global assessments (including PISA) on cultures of testing and learning worldwide.
+#' 
+#' 
