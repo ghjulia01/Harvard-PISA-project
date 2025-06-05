@@ -51,3 +51,18 @@ Discussion of key findings and policy recommendations.
 
 All code is written in R and leverages tidyverse for data processing and visualization.
 
+author: Julie COLLEONI
+
+Special thanks:
+
+I would like to express my sincere gratitude to Professor Rafael Irizarry for his outstanding teaching and inspiring courses in Data Science at Harvard. His passion for the subject and dedication to sharing knowledge have been instrumental in shaping my understanding and appreciation of the field.
+I would like to acknowledge also his books, which served as a valuable references throughout this project. Thanks to his Data Science program, my skills and understanding of the subject have improved tremendously.
+
+
+Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
+Prediction Algorithms with R (Part I)*. Self-published.
+https://rafalab.dfci.harvard.edu/dsbook-part-1/
+
+Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
+Prediction Algorithms with R (Part II)*. Self-published.
+https://rafalab.dfci.harvard.edu/dsbook-part-2/
