@@ -1,5 +1,7 @@
 # Harvard-PISA-project
 
+This report documents a predictive modeling project conducted as part of the HarvardX program in Data Science.
+
 PISA  – Predicting School and Student Success
 This project explores the determinants of educational success using the **LearningTower dataset**, which compiles international data from the OECD PISA studies at the school and student levels. 
 The research work on PISA survey data was made possible thanks to the great work of the MIT team:
