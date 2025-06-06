@@ -10,7 +10,7 @@ output:
     toc_depth: 3             
     number_sections: true     
     includes:
-geometry: margin=2.5cm       
+geometry: margin=2 cm       
 always_allow_html: true
 editor_options: 
   markdown: 
@@ -20,7 +20,7 @@ editor_options:
 # Introduction
 
 This report documents a predictive modeling project conducted as part of
-the HarvardX Professional Certificate in Data Science.
+the HarvardX program in Data Science.
 
 Education is widely recognized as a key driver of social and economic
 development. The Programme for International Student Assessment (PISA),
@@ -37,36 +37,68 @@ This project addresses the predicability of academic performance:
     national trends, the context of their school, family background, and
     personal characteristics?
 
-The LearningTower dataset, which combines school, student, and
-contextual data across multiple countries, provides an opportunity to
-investigate these questions.
+This project explores the determinants of educational success using the
+**LearningTower dataset**, which compiles international data from the
+**OECD PISA studies at the school and student levels** and provides an
+opportunity to investigate these questions.
+
+The research work on PISA survey data through LearningTower dataset was
+made possible thanks to the great work of the MIT team:
+
+Wang K, Yacobellis P, Siregar E, Romanes S, Fitter K, Dalla Riva G, Cook
+D, Tierney N, Dingorkar P, Sai Subramanian S, Chen G (2024).
+learningtower: OECD PISA Datasets from 2000-2022 in an Easy-to-Use
+Format. R package version 1.1.0,
+<https://github.com/kevinwang09/learningtower>,
+<https://kevinwang09.github.io/learningtower/>.
 
 In addition to the core PISA LearningTower datasets, several auxiliary
 databases are integrated to enrich the contextual and explanatory power
 of the analysis. These include:
 
--   a gender-specific school enrollment index derived from UNESCO data,
+-   **UNESCO School Gender Enrollment Index** Source: UNESCO, World Bank
+    Data 360 Description: This dataset contains enrollment indices by
+    gender for secondary and upper secondary education, sourced from
+    UNESCO and curated for this project. It provides an overview of the
+    relative school participation rates for males and females, allowing
+    for the analysis of gender parity and educational equality across
+    countries and over time.
 
--   UNESCO-based government expenditure on education as a percentage of
-    total government spending, and
+-   **UNESCO Government Expenditure on Education** Source: UNESCO, World
+    Bank Data 360 Description: This table reports the percentage of
+    total government expenditure allocated to education for each
+    country. It is based on UNESCO data and provides insight into
+    national education priorities and funding trends, which are key
+    contextual factors in the analysis of educational outcomes.
 
--   GDP per capita (PPP) from the OECD and Eurostat databases
+-   **ILO/World Bank Country Groupings (Region, Subregion, and Income
+    Level)** Source: ILOSTAT Country Groupings Description: This
+    classification table groups countries by ILO region, subregion, and
+    World Bank income classification (low, lower-middle, upper-middle,
+    and high income). It enables regional and socioeconomic
+    stratification of educational indicators, supporting comparative and
+    equity-focused analysis.
 
--   a country grouping classification based on ILO regions and World
-    Bank income levels.
+-   **GDP per capita (PPP) /the OECD and Eurostat databases** Source:
+    World Bank Data 360 Description: A country's gross domestic product
+    (GDP) at purchasing power parity (PPP) per capita is the PPP value
+    of all final goods and services produced within an economy in a
+    given year, divided by the average (or mid-year) population for the
+    same year. This is similar to nominal GDP per capita but adjusted
+    for the cost of living in each country.
 
-By merging these sources, the project enables multilevel analysis of
+By merging these sources, the project enables **multilevel analysis of
 educational performance, accounting for gender parity, resource
-allocation, regional context, and national socioeconomic status.
+allocation, regional context, and national socioeconomic status.**
 
 The objectives of the present analysis are as follows:
 
-1\. To estimate, for each student, the probability of “success”, by
+1\. **To estimate, for each student, the probability of “success”**, by
 incorporating information about the student’s school, family
 environment, and individual profile.
 
-2\. To identify and interpret the key drivers of student success, and to
-suggest targeted policy recommendations.
+2\. **To identify and interpret the key drivers of student success**,
+and to suggest targeted policy recommendations.
 
 The methodology combines data preparation, exploratory visualization,
 and predictive modeling, with a particular emphasis on interpretability.
@@ -81,37 +113,58 @@ policymakers.
 
 ## Dataset Overview
 
-The LearningTower dataset compiles detailed information on schools and
-students across multiple countries, primarily based on data from the
-OECD PISA studies. This dataset offers a rich set of variables,
+The **LearningTower dataset** compiles detailed information on schools
+and students across multiple countries, primarily based on data from the
+**OECD PISA studies**. This dataset offers a rich set of variables,
 including academic results, school resources, student demographics, and
 various contextual indicators. For this project, the most recent
 publicly available data will be used. The dataset can be directly
 downloaded from the LearningTower GitHub repository.
 
-```{r PISA-dataset-overview-1-download-data, message=FALSE, warning=FALSE}
+```{r PISA-dataset-overview-1-download-data-in, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # Load necessary packages
-if (!require(tidyverse)) install.packages("tidyverse", repos = "https://cloud.r-project.org/")
+if (!require(tidyverse)) 
+  install.packages("tidyverse", repos = "https://cloud.r-project.org/")
 
-if(!require(caret)) install.packages("caret", repos = "http://cran.us.r-project.org")
+```
 
-if (!require(janitor)) install.packages("janitor", repos = "https://cloud.r-project.org/")
+```{r PISA-dataset-overview-1-download-data-bis, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
 
-if (!require(DataExplorer)) install.packages("DataExplorer", repos = "https://cloud.r-project.org/")
+if(!require(caret)) 
+  install.packages("caret", repos = "http://cran.us.r-project.org")
 
-if (!require(corrplot)) install.packages("corrplot", repos = "https://cloud.r-project.org/")
+if (!require(janitor)) 
+  install.packages("janitor", repos = "https://cloud.r-project.org/")
+
+if (!require(DataExplorer)) 
+  install.packages("DataExplorer", repos = "https://cloud.r-project.org/")
+```
+
+```{r PISA-dataset-overview-1-download-data-ter, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
+
+if (!require(corrplot)) 
+  install.packages("corrplot", repos = "https://cloud.r-project.org/")
+
+if (!require(xgboost)) 
+  install.packages("xgboost", repos = "https://cloud.r-project.org/")
+
+if (!require(Matrix)) 
+  install.packages("Matrix", repos = "https://cloud.r-project.org/")
+
+if (!require(ranger)) 
+  install.packages("ranger", repos = "https://cloud.r-project.org/")
 
 # For the PISA dataset
-if (!require(learningtower)) install.packages("learningtower", repos = "https://cloud.r-project.org/")
+if (!require(learningtower)) 
+  install.packages("learningtower", repos = "https://cloud.r-project.org/")
+```
 
-if (!require(xgboost)) install.packages("xgboost", repos = "https://cloud.r-project.org/")
-
-if (!require(Matrix)) install.packages("Matrix", repos = "https://cloud.r-project.org/")
-
-if (!require(ranger)) install.packages("ranger", repos = "https://cloud.r-project.org/")
-
+```{r PISA-dataset-overview-1-download-data-quater, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
 
 library(learningtower)
 library(dplyr)
@@ -140,6 +193,10 @@ data(school)
 data(countrycode)
 head(countrycode)
 
+```
+
+```{r PISA-dataset-overview-2-download-data, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
 
 student_summary <- student |>
   group_by(year) |>
@@ -155,10 +212,10 @@ knitr::kable(combined_summary)
 
 ```
 
+Verification of the columns name of the different tables
+
 ```{r PISA-dataset-additional-database, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
-
-
 
 # URLs to the raw CSV files in my GitHub repo
 url_gender <- "https://raw.githubusercontent.com/ghjulia01/Harvard-PISA-project/main/UNESCO_School_gender_enrollment_index.csv"
@@ -249,11 +306,11 @@ their sampling weight.
 
 *Note:*
 
-*Using student weights designed for one subject (e.g., reading) to
-analyze results for another subject (e.g., mathematics or science) can
-introduce bias, especially due to oversampling of students in special
-education. In such cases, correction factors must be applied to avoid
-under- or overestimation, as detailed in the PISA technical
+*Using student weights designed for one subject (for instance, reading)
+to analyze results for another subject (for instance, mathematics or
+science) can introduce bias, especially due to oversampling of students
+in special education. In such cases, correction factors must be applied
+to avoid under- or overestimation, as detailed in the PISA technical
 documentation.*
 
 In summary, the stu_wgt variable is critical for producing valid and
@@ -466,15 +523,45 @@ influence from erroneous or extreme values.
 ```{r PISA-data-cleaning-outlier-detection, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# Inspect score distributions
-cat("\nMath:\n")
-summary(student$math)
-cat("\nRead:\n")
-summary(student$read)
-cat("\nScience:\n")
-summary(student$science)
+# Retrieve summary statistics as vectors
+math_summary <- summary(student$math)
+read_summary <- summary(student$read)
+science_summary <- summary(student$science)
+
+# Names of statistics (Min, 1st Qu., Median, Mean, 3rd Qu., Max)
+stats_names <- names(math_summary)
+
+# Create a data frame
+summary_df <- data.frame(
+  Statistic = stats_names,
+  Math = as.numeric(math_summary),
+  Reading = as.numeric(read_summary),
+  Science = as.numeric(science_summary)
+)
+
+# Display as a table with nice formatting
+summary_df %>%
+  kbl(
+    caption = "Summary Statistics for Math, Reading, and Science Scores",
+    digits = 2,
+    align = "lccc",
+    booktabs = TRUE
+  ) %>%
+  kable_styling(latex_options = "striped", font_size = 9)
 
 ```
+
+After identifying the potential presence of outliers in the test score
+distributions, the next step is to clean the dataset by removing extreme
+or implausible values. Since PISA scores should logically fall within a
+defined range, any math, reading, or science scores outside the interval
+50 to 1000 are considered invalid or likely to result from data entry
+errors.
+
+By filtering out these values, we ensure that our analysis is not skewed
+by erroneous or unrealistic data points. This cleaning step helps
+maintain the integrity and reliability of all subsequent statistical
+analyses and modeling.
 
 ```{r PISA-data-cleaning-outlier-correction, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
@@ -486,13 +573,31 @@ student <- student %>%
          between(read, 50, 1000),
          between(science, 50, 1000))
 
-# Inspect score distributions
-cat("\nMath:\n")
-summary(student$math)
-cat("\nRead:\n")
-summary(student$read)
-cat("\nScience:\n")
-summary(student$science)
+# Retrieve summary statistics as vectors
+math_summary <- summary(student$math)
+read_summary <- summary(student$read)
+science_summary <- summary(student$science)
+
+# Names of statistics (Min, 1st Qu., Median, Mean, 3rd Qu., Max)
+stats_names <- names(math_summary)
+
+# Create a data frame
+summary_df <- data.frame(
+  Statistic = stats_names,
+  Math = as.numeric(math_summary),
+  Reading = as.numeric(read_summary),
+  Science = as.numeric(science_summary)
+)
+
+# Display as a table with nice formatting
+summary_df %>%
+  kbl(
+    caption = "Summary Statistics for Math, Reading, and Science Scores",
+    digits = 2,
+    align = "lccc",
+    booktabs = TRUE
+  ) %>%
+  kable_styling(latex_options = "striped", font_size = 10)
 
 ```
 
@@ -506,17 +611,47 @@ entries).
 knitr::opts_chunk$set(echo=FALSE)
 
 # Check unique values for consistency
-table(school$public_private, useNA = "always")
+# Count of each category (with NA)
+public_private_table <- as.data.frame(table(school$public_private, useNA = "always"))
+colnames(public_private_table) <- c("School Type", "Count")
+
+knitr::kable(
+  public_private_table,
+  caption = "Number of Schools by Type ",
+  align = "lc",
+  booktabs = TRUE
+)
+```
+
+```{r PISA-data-cleaning-standardization-private-public, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo=FALSE)
 
 # Check for 'private' when fund_gov > 80
-inconsistent_private <- school %>%
-  filter(fund_gov > 80 & public_private == "private")
-nrow(inconsistent_private) # Should be 0 ideally
-
+inconsistent_private_n <- school %>%
+  filter(fund_gov > 80 & public_private == "private") %>%
+  nrow()
 # Check for 'public' when fund_gov < 50
-inconsistent_public <- school %>%
-  filter(fund_gov < 50 & public_private == "public")
-nrow(inconsistent_public) # Should be 0 ideally
+inconsistent_public_n <- school %>%
+  filter(fund_gov < 50 & public_private == "public") %>%
+  nrow()
+
+consistency_df <- data.frame(
+  "Check" = c(
+    "'private' with fund_gov > 80",
+    "'public' with fund_gov < 50"
+  ),
+  "Number of inconsistent cases" = c(
+    inconsistent_private_n,
+    inconsistent_public_n
+  )
+)
+
+knitr::kable(
+  consistency_df,
+  caption = "Number of Schools with Inconsistent 'public_private' Label and Government Funding",
+  align = "lc",
+  booktabs = TRUE
+)
 
 ```
 
@@ -544,7 +679,32 @@ school <- school %>%
   )
 
 # Re-run the table to check new distribution
-table(school$public_private, useNA = "always")
+# Check for 'private' when fund_gov > 80
+inconsistent_private_n <- school %>%
+  filter(fund_gov > 80 & public_private == "private") %>%
+  nrow()
+# Check for 'public' when fund_gov < 50
+inconsistent_public_n <- school %>%
+  filter(fund_gov < 50 & public_private == "public") %>%
+  nrow()
+
+consistency_df <- data.frame(
+  "Check" = c(
+    "'private' with fund_gov > 80",
+    "'public' with fund_gov < 50"
+  ),
+  "Number of inconsistent cases" = c(
+    inconsistent_private_n,
+    inconsistent_public_n
+  )
+)
+
+knitr::kable(
+  consistency_df,
+  caption = "Number of Schools with Inconsistent 'public_private' Label and Government Funding",
+  align = "lc",
+  booktabs = TRUE
+)
 
 ```
 
@@ -578,28 +738,16 @@ weighted.mean(student$avg_score, student$stu_wgt, na.rm = TRUE)
 
 **Correct the country code:**
 
-The first step is to detect the problematic country codes:
-
-```{r PISA-data-country-code-error, message=FALSE, warning=FALSE}
-knitr::opts_chunk$set(echo=FALSE)
-
-#student %>%
-#  filter(is.na(ilo_subregion)) %>%
-#  count(year)
-
-#student %>%
-#  filter(is.na(ilo_subregion)) %>%
-#  count(country) %>%
-#  arrange(desc(n))
-
-#student %>%
-#  filter(is.na(ilo_subregion)) %>%
-#  select(year, country, avg_score, stu_wgt) %>%
-#  head(20)
-
-```
-
-In a second step to correct them to the correct country code.
+To ensure consistency in country identification across both the student
+and school datasets, we first standardize all country codes by
+converting them to uppercase characters. This step helps to avoid issues
+caused by variations in letter casing (for example, "usa" vs. "USA").
+Next, we systematically recode country codes using a predefined mapping.
+This mapping aligns alternative or legacy codes with their official ISO3
+codes (for example, converting "TAP" to "TWN" for Taiwan, "QES" to "ESP"
+for Spain, and so on). The recoding is applied to both datasets using
+the recode() function, which replaces each value in the country column
+according to the specified mapping.
 
 ```{r PISA-data-cleaning-country-code-correction, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
@@ -652,22 +800,22 @@ school <- school %>%
   mutate(country = recode(country, !!!country_recode))
 
 # Check the remaining codes
-print("Remaining country codes in student :")
-print(sort(unique(student$country)))
-print("Remaining country codes in school :")
-print(sort(unique(school$country)))
+#print("Remaining country codes in student :")
+#print(sort(unique(student$country)))
+#print("Remaining country codes in school :")
+#print(sort(unique(school$country)))
 
 
 # Codes present in the datasets but absent from the recoding
-setdiff(unique(student$country), country_recode)
-setdiff(unique(school$country), country_recode)
+#setdiff(unique(student$country), country_recode)
+#setdiff(unique(school$country), country_recode)
 
 ```
 
-recode(country, !!!country_recode) will replace each value in the
-country column according to the mapping above.
-
-If a code is not in the vector, it remains unchanged.
+After recoding, the remaining unique country codes are checked in the
+different datasets, and any codes not included in the mapping are
+identified. This harmonization process is essential for accurate
+merging, aggregation, and analysis at the country level.
 
 ```{r PISA-data-cleaning-joining-region-income-and-student, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
@@ -701,7 +849,7 @@ knitr::opts_chunk$set(echo=FALSE)
 ggplot(student, aes(x = avg_score)) +
   geom_histogram(bins = 30, fill = "#a4c6f2", color = "white", width = 0.8) +
   theme_minimal() +
-  ggtitle("Distribution of the average score\n  of math, read and science in PISA\n the students are expressed in millions") +
+  ggtitle("Distribution of the average score  of math, read and science in PISA the students are expressed in millions") +
   scale_y_continuous(
     labels = label_number(scale = 1e-6, accuracy = 0.1, suffix = "M")
   )
@@ -756,9 +904,9 @@ ggplot(students_by_country, aes(x = reorder(country_name, n_students), y = n_stu
     y = "Number of students"
   ) +
   scale_y_continuous(labels = label_number(scale = 1e-3, accuracy = 0.1, suffix = "K")) +
-  coord_flip() +  # Affiche horizontalement
+  coord_flip() + 
   theme(
-    axis.text.y = element_text(size = 7) # Ajuste la taille sur y maintenant
+    axis.text.y = element_text(size = 7) 
   )
 
 ```
@@ -788,7 +936,7 @@ schools_by_country <- student %>%
   group_by(country_name) %>%
   summarise(n_schools = n_distinct(school_id)) %>%
   arrange(desc(n_schools)) %>%
-  mutate(country_name = str_trunc(country_name, 22))  # Tronque à 22 caractères
+  mutate(country_name = str_trunc(country_name, 22))  
 
 # Graph
 ggplot(schools_by_country, aes(x = reorder(country_name, n_schools), y = n_schools)) +
@@ -919,31 +1067,28 @@ wm_wide <- wm_wide %>%
   arrange(desc(variation_perc))
 
 # 5. Rename columns for readability, using multi-line headers
-colnames(wm_wide) <- c(
-  "Region",
-  "Weighted Mean Average\n2009",
-  "Weighted Mean Average\n2022",
-  "Change (%)"
-)
 
-# 6. Create a styled table with colored header
-wm_wide %>%
-  kbl(
-    caption = "Change in Weighted Mean Average Score by Region (2009–2022)",
-    align = c("l", "c", "c", "c"),
-    format = "html"
-  ) %>%
-  kable_styling(
-    full_width = FALSE,
-    position = "center",
-    bootstrap_options = c("striped", "hover", "condensed")
-  ) %>%
-  row_spec(
-    0,
-    bold = TRUE,
-    background = "#dbeafe",
-    color = "#000000"
+if (knitr::is_latex_output()) {
+  # Pour PDF/LaTeX
+  colnames(wm_wide) <- c(
+    "Region",
+    "Weighted Mean 2009",
+    "Weighted Mean 2022",
+    "Change (%)"
   )
+  wm_wide %>%
+    kbl(
+      caption = "Change in Weighted Mean Average Score by Region (2009–2022)",
+      align = c("l", "c", "c", "c"),
+      format = "latex",
+      booktabs = TRUE,
+      escape = TRUE 
+    ) %>%
+    kable_styling(
+      latex_options = c("striped", "hold_position"),
+      font_size = 9
+    )}
+
 
 ```
 
@@ -973,7 +1118,7 @@ student <- student %>%
   clean_names() %>%
   select(-starts_with("world_bank_income_group_"))
 
-#Create and store the summary table in a variable
+# Create and store the summary table in a variable
 wm_income <- student %>%
   filter(!is.na(world_bank_income_group)) %>%
   group_by(world_bank_income_group) %>%
@@ -989,7 +1134,7 @@ wb_summary <- region_income %>%
   group_by(world_bank_income_group) %>%              # Group by income group
   summarise(
     wb_country_count = n_distinct(country),          # Count number of unique countries
-    wb_countries = paste(sort(unique(country)), collapse = ", ")  # List countries alphabetically
+    wb_countries = paste(sort(unique(country)), collapse = ", ")  # #List countries alphabetically
   )
 
 # The number of PISA countries by income group is already calculated in wm_income
@@ -1015,14 +1160,14 @@ coverage_summary <- wb_summary %>%
 coverage_summary_final <- coverage_summary %>%
   select(
     "Income group" = world_bank_income_group,
-    "World Bank countries" = wb_country_count,
+    "WB countries" = wb_country_count,
     "PISA countries" = pisa_country_count,
     "Coverage (%)" = coverage_pct,
-    "PISA country list" = pisa_countries,
-    "WB country list" = wb_countries
+ #   "PISA country list" = pisa_countries,
+ #  "WB Country list" = wb_countries
   )
 
-# Add an ordering variable, then arrange by that variable
+#Add an ordering variable, then arrange by that variable
 coverage_summary_final <- coverage_summary_final %>%
   mutate(
     income_order = match(`Income group`, c(
@@ -1032,13 +1177,12 @@ coverage_summary_final <- coverage_summary_final %>%
   arrange(income_order) %>%
   select(-income_order)  # remove the helper column
 
-
 # Display the final summary table with kable and custom styling
 coverage_summary_final %>%
   kbl(
     caption = "PISA Country Coverage by World Bank Income Group",
-    align = c("l", "c", "c", "c", "l", "l"),
-    format = "html"
+    align = c("l", "c", "c", "c"),
+    booktabs = TRUE
   ) %>%
   kable_styling(
     full_width = FALSE,
@@ -1050,9 +1194,12 @@ coverage_summary_final %>%
     bold = TRUE,
     background = "#dbeafe",
     color = "#000000"
+  ) %>%
+  footnote(
+    general = "WB Countries: World Bank Countries classification",
+    general_title = "Note:",
+    footnote_as_chunk = FALSE
   )
-
-
 ```
 
 The findings clearly demonstrate that PISA participation is heavily
@@ -1206,7 +1353,7 @@ contexts and time periods.
 ```{r PISA-data-exploration-bottom-escs-top-grades-quartiles, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# 1. Calculate the desired proportion for each year x income level combination
+# 1. Calculate proportions
 result_proportion <- student_with_all_quartiles %>%
   filter(
     !is.na(world_bank_income_group),
@@ -1218,46 +1365,77 @@ result_proportion <- student_with_all_quartiles %>%
   group_by(year, world_bank_income_group) %>%
   summarise(
     n_total = n(),
-    n_bottom_escs_top_avg = sum(escs_quartile == "Q1 (Bottom 25%)" & avg_score_quartile == "Q4 (Top 25%)", na.rm = TRUE),
-    prop_bottom_escs_top_avg = round(100 * n_bottom_escs_top_avg / n_total, 2)
-  ) %>%
-  ungroup() %>%
-  arrange(world_bank_income_group, year)
-
-# 3. Calculate the average of the Top 25% avg_score scores per group
-mean_top25 <- student_with_all_quartiles %>%
-  filter(
-    !is.na(world_bank_income_group),
-    !is.na(year),
-    avg_score_quartile == "Q4 (Top 25%)"
-  ) %>%
-  group_by(year, world_bank_income_group) %>%
-  summarise(
-    `Top 25% avg_score Mean` = round(mean(avg_score, na.rm = TRUE), 0),
+    n_bottom_escs_top_avg = sum(
+      escs_quartile == "Q1 (Bottom 25%)" &
+      avg_score_quartile == "Q4 (Top 25%)",
+      na.rm = TRUE
+    ),
+    prop_bottom_escs_top_avg = round(100 * n_bottom_escs_top_avg / n_total, 2),
     .groups = "drop"
-  )
-
-# 4. Attach this column to your main table
-result_proportion <- result_proportion %>%
-  left_join(mean_top25, by = c("year", "world_bank_income_group")) %>%
-  rename(
-    "Year" = year,
-    "World Bank Income Group" = world_bank_income_group,
-    "Total Students" = n_total,
-    "N (Bottom 25% ESCS & Top 25% Score)" = n_bottom_escs_top_avg,
-    "Proportion (%)" = prop_bottom_escs_top_avg,
-    "Top 25% avg_score Mean" = `Top 25% avg_score Mean`
-  )%>%
+  ) %>%
+  left_join(
+    student_with_all_quartiles %>%
+      filter(
+        !is.na(world_bank_income_group),
+        !is.na(year),
+        avg_score_quartile == "Q4 (Top 25%)"
+      ) %>%
+      group_by(year, world_bank_income_group) %>%
+      summarise(
+        top25_mean = round(mean(avg_score, na.rm = TRUE), 0),
+        .groups = "drop"
+      ),
+    by = c("year", "world_bank_income_group")
+  ) %>%
   mutate(
-    `Total Students` = format(`Total Students`, big.mark = " "),
-    `N (Bottom 25% ESCS & Top 25% Score)` = format(`N (Bottom 25% ESCS & Top 25% Score)`, big.mark = " ")
+    n_total_fmt = format(n_total, big.mark = " "),
+    n_bottom_fmt = format(n_bottom_escs_top_avg, big.mark = " ")
+  ) %>%
+  rename(
+    Year = year,
+    IncomeGroup = world_bank_income_group,
+    ProportionPercent = prop_bottom_escs_top_avg,
+    Top25MeanPISA = top25_mean
   )
 
-# 5. A table summarizing the information
-result_proportion %>%
-  knitr::kable(
-    caption = "Proportion of students in Bottom 25% ESCS and Top 25% avg_score by World Bank income group and year"
+# 2. Create the table
+kbl_table <- result_proportion %>%
+  select(
+    Year, 
+    IncomeGroup,
+    TotalStudents = n_total_fmt,
+    Bottom25ESCSTop25PISA = n_bottom_fmt,
+    ProportionPercent,
+    Top25MeanPISA
   )
+
+# 3. Define column names 
+colnames_pretty_safe <- c(
+  "Year",
+  "Income Group",
+  "Total Students", 
+  "Students BottomESCS TopPISA",
+  "Proportion Perc.",
+  "Mean Score Top Quartile"
+)
+
+kbl_table %>%
+  kbl(
+    caption = "Educational Mobility: ESCS Bottom Quartile to Top Quartile PISA",
+    align = c("l", "l", "c", "c", "c", "c"),
+    escape = FALSE,
+    booktabs = TRUE,
+    col.names = colnames_pretty_safe  
+  ) %>%
+  kable_styling(
+    latex_options = c("striped", "hold_position"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE) %>%
+  column_spec(4, width = "3.5cm") %>%
+  column_spec(6, width = "3cm")
+
 ```
 
 The comprehensive table reveals several important patterns across income
@@ -1292,17 +1470,45 @@ knitr::opts_chunk$set(echo=FALSE)
 
 
 ggplot(result_proportion %>% filter(Year != 2000), 
-       aes(x = Year, y = `Proportion (%)`, color = `World Bank Income Group`, group = `World Bank Income Group`)) +
+       aes(x = Year, y = ProportionPercent, color = IncomeGroup, group = IncomeGroup)) +
   geom_line(size = 1.2) +
   geom_point(size = 2) +
   labs(
-    title = "Educational Mobility: % of Students in Bottom 25% ESCS & Top 25% avg_score (2000 excluded)",
+    title = "Educational Mobility: % of Students in Bottom 25% ESCS & Top 25% PISA score",
     x = "Year",
     y = "Proportion (%)",
-    color = "WB Income Group"
+    color = "World Bank Income Group"
   ) +
-  theme_minimal()
+  theme_minimal() +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))+
+  theme(legend.position = "bottom")
+
 ```
+
+Despite the variations observed across income groups and time periods, a
+fundamental limitation emerges from this analysis: **the proportion of
+students from the bottom 25% ESCS who achieve top 25% PISA performance
+remains consistently low across all regions, fluctuating only between
+2.39% and 3.52%.**
+
+This narrow range reveals that **no income group has truly succeeded in
+enabling substantial educational mobility through their education
+systems.**
+
+Even the "highest performing" lower-middle income countries at their
+peak (3.52% in 2009) still leave over 96% of the most disadvantaged
+students unable to reach top academic performance levels. This suggests
+that while relative differences between income groups may be
+statistically meaningful, the absolute levels of educational mobility
+remain **universally limited** across all economic contexts.
+
+**Implications:** These findings indicate that educational systems
+worldwide, regardless of their economic development level, face similar
+structural challenges in overcoming socioeconomic disadvantage. The
+persistent ceiling of approximately 3.5% suggests that **educational
+mobility remains an exceptional rather than systematic outcome**,
+highlighting the need for more fundamental reforms to achieve meaningful
+equity in educational opportunities.
 
 **The visual representation of these data reveals several striking
 patterns:**
@@ -1312,11 +1518,6 @@ divergence that occurs around 2018. While high-income and upper-middle
 income countries maintain relatively stable, low levels of educational
 mobility, lower-middle income countries experience significant
 volatility.
-
-**The 2018 Anomaly:** All three income groups converge around 2018, with
-lower-middle income countries experiencing their lowest point (2.39%).
-This convergence is followed by a sharp recovery for lower-middle income
-countries by 2022, while the other groups remain relatively unchanged.
 
 **Stability vs. Volatility:** High-income and upper-middle income
 countries show remarkable stability across the time period, suggesting
@@ -1329,18 +1530,18 @@ reforms, economic instability, or different measurement sensitivities.
 assumptions about the relationship between national wealth and
 educational equity. The fact that lower-middle income countries
 generally outperform high-income countries in educational mobility
-suggests that factors beyond simple resource availability—such as social
-structure, educational policy, or cultural values—play crucial roles in
-determining educational outcomes for disadvantaged students.
+suggests that factors beyond simple resource availability; such as
+social structure, educational policy, or cultural values, play crucial
+roles in determining educational outcomes for disadvantaged students.
 
-**Implications:** These findings have significant implications for
-educational policy and our understanding of equity. They suggest that
-educational mobility is not simply a function of national wealth, but
-rather depends on complex interactions between social structures,
-educational policies, and cultural factors. The superior performance of
-lower-middle income countries in promoting educational mobility may
-offer valuable lessons for higher-income nations seeking to improve
-equity in their educational systems.
+These findings have significant implications for educational policy and
+our understanding of equity. They suggest that educational mobility is
+not simply a function of national wealth, but rather depends on complex
+interactions between social structures, educational policies, and
+cultural factors. The superior performance of lower-middle income
+countries in promoting educational mobility may offer valuable lessons
+for higher-income nations seeking to improve equity in their educational
+systems.
 
 ### PISA Performance in Lower-Income Countries: The Socioeconomic Achievement Gap Across Time
 
@@ -1368,7 +1569,6 @@ student_with_all_quartiles <- student_with_all_quartiles %>%
     country = toupper(trimws(as.character(country)))
   )
 
- 
 # 2. Compute Weighted Means for Each Social Group
  
 means_lm <- student_with_all_quartiles %>%
@@ -1419,7 +1619,6 @@ avg_segments <- segments_lm %>%
   ) %>%
   mutate(across(everything(), as.character))
 
- 
 # 4. Calculate Average for All Countries
  
 means_all <- student_with_all_quartiles %>%
@@ -1453,7 +1652,6 @@ means_all <- student_with_all_quartiles %>%
     country_name = "Average (All countries)"
   ) %>%
   mutate(across(everything(), as.character))
-
  
 # 5. Harmonize and Check Columns Before Merging
  
@@ -1599,7 +1797,7 @@ summary_table <- latest_year %>%
   ) %>%
   arrange(desc(`Difference (Q4 - Q1)`))
 
-# 5. Display the table ---
+# 5. Display the table
 knitr::kable(
   summary_table,
   caption = "Difference in Mean Scores between Top and Bottom ESCS Quartiles (Most Recent Year, Lower-middle Income Countries)",
@@ -1934,12 +2132,12 @@ comparisons.
 **Highest Performing Countries:**
 
 **China** leads in absolute performance with the top 25% ESCS students
-scoring 630 points, though with a substantial 79-point gap. **Îles Turks
-et Caicos** shows exceptional performance for advantaged students (506
-points) but with a concerning 74-point gap. **Russian Federation** (2018
-data) demonstrates strong performance with top students at 512 points
-and a moderate 64-point gap. **Belarus** (2018 data) achieves high
-performance (523 points for top 25%) but maintains a significant
+scoring 630 points, though with a substantial 79-point gap. **Turks and
+Caicos Islands** shows exceptional performance for advantaged students
+(506 points) but with a concerning 74-point gap. **Russian Federation**
+(2018 data) demonstrates strong performance with top students at 512
+points and a moderate 64-point gap. **Belarus** (2018 data) achieves
+high performance (523 points for top 25%) but maintains a significant
 100-point gap.
 
 **Most Equitable Systems:**
@@ -2355,8 +2553,8 @@ despite strong top-performer achievement.
 **East Asian Excellence with Variation:**
 
 East Asian systems show remarkable diversity: **Macao** and **Hong
-Kong** achieve both high performance and equity, while **Taiwan\*
-maintains high performance with moderate equity.** Japan\*\*
+Kong** achieve both high performance and equity, while **Taiwan**
+maintains high performance with moderate equity**.** **Japan**
 demonstrates strong performance (495-569 points) with a reasonable
 74-point gap. **Republic of Korea** balances high achievement with
 relatively manageable inequality.
@@ -2486,9 +2684,9 @@ might obscure the spending-achievement relationship.
 ```{r PISA-data-exploration-correlation-percentage-gdp-education-pisa-lower-middle-income, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# =====================
+ 
 # 1. Prepare Education Expenditure Data (latest available up to 2022)
-# =====================
+ 
 edu_exp_latest <- expenditure %>%
   filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
   group_by(country) %>%
@@ -2496,9 +2694,9 @@ edu_exp_latest <- expenditure %>%
   ungroup() %>%
   select(country, expenditure_year = year, percentage_education_on_gdp)
 
-# =====================
+ 
 # 2. Calculate Weighted Average Mean Score by Country-Year
-# =====================
+ 
 mean_scores <- student %>%
   filter(
     !is.na(avg_score),
@@ -2512,9 +2710,9 @@ mean_scores <- student %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 3. Merge Scores with Expenditure Data (latest available year)
-# =====================
+ 
 # Get the latest available PISA score per country (up to 2022)
 mean_scores_latest <- mean_scores %>%
   filter(year <= 2022) %>%
@@ -2532,14 +2730,14 @@ scores_exp <- scores_exp %>%
   left_join(region_income %>% select(country, country_name), by = "country") %>%
   mutate(country_name = ifelse(is.na(country_name), country, country_name))
 
-# =====================
+ 
 # 4. Plot: % Education Expenditure vs Weighted Average Mean Score
-# =====================
+ 
 
 ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
   geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
   geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
-  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  geom_text_repel(size = 2.7, max.overlaps = 15) +
   labs(
     title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(Lower-middle Income Countries, latest year up to 2022)",
     x = "Education Spending (% of GDP) (latest available year up to 2022)",
@@ -2627,9 +2825,9 @@ might obscure the spending-achievement relationship.
 ```{r PISA-data-exploration-correlation-percentage-gdp-education-pisa-upper-middle-income, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# =====================
+ 
 # 1. Prepare Education Expenditure Data (latest available up to 2022)
-# =====================
+ 
 edu_exp_latest <- expenditure %>%
   filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
   group_by(country) %>%
@@ -2637,9 +2835,9 @@ edu_exp_latest <- expenditure %>%
   ungroup() %>%
   select(country, expenditure_year = year, percentage_education_on_gdp)
 
-# =====================
+ 
 # 2. Calculate Weighted Average Mean Score by Country-Year
-# =====================
+ 
 mean_scores <- student %>%
   filter(
     !is.na(avg_score),
@@ -2653,9 +2851,9 @@ mean_scores <- student %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 3. Merge Scores with Expenditure Data (latest available year)
-# =====================
+ 
 # Get the latest available PISA score per country (up to 2022)
 mean_scores_latest <- mean_scores %>%
   filter(year <= 2022) %>%
@@ -2673,14 +2871,14 @@ scores_exp <- scores_exp %>%
   left_join(region_income %>% select(country, country_name), by = "country") %>%
   mutate(country_name = ifelse(is.na(country_name), country, country_name))
 
-# =====================
+ 
 # 4. Plot: % Education Expenditure vs Weighted Average Mean Score
-# =====================
+ 
 
 ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
   geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
   geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
-  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  geom_text_repel(size = 2.7, max.overlaps = 15) +
   labs(
     title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(Upper-middle Income Countries, latest year up to 2022)",
     x = "Education Spending (% of GDP) (latest available year up to 2022)",
@@ -2772,9 +2970,9 @@ spending-achievement relationship.
 ```{r PISA-data-exploration-correlation-percentage-gdp-education-pisa-high-income, fig.width=8, fig.height=12, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# =====================
+ 
 # 1. Prepare Education Expenditure Data (latest available up to 2022)
-# =====================
+ 
 edu_exp_latest <- expenditure %>%
   filter(!is.na(percentage_education_on_gdp), year <= 2022) %>%
   group_by(country) %>%
@@ -2782,9 +2980,9 @@ edu_exp_latest <- expenditure %>%
   ungroup() %>%
   select(country, expenditure_year = year, percentage_education_on_gdp)
 
-# =====================
+ 
 # 2. Calculate Weighted Average Mean Score by Country-Year
-# =====================
+ 
 mean_scores <- student %>%
   filter(
     !is.na(avg_score),
@@ -2798,9 +2996,9 @@ mean_scores <- student %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 3. Merge Scores with Expenditure Data (latest available year)
-# =====================
+ 
 # Get the latest available PISA score per country (up to 2022)
 mean_scores_latest <- mean_scores %>%
   filter(year <= 2022) %>%
@@ -2818,14 +3016,14 @@ scores_exp <- scores_exp %>%
   left_join(region_income %>% select(country, country_name), by = "country") %>%
   mutate(country_name = ifelse(is.na(country_name), country, country_name))
 
-# =====================
+ 
 # 4. Plot: % Education Expenditure vs Weighted Average Mean Score
-# =====================
+ 
 
 ggplot(scores_exp, aes(x = percentage_education_on_gdp, y = weighted_avg_score, label = country_name)) +
   geom_point(size = 2.5, color = "#23395d", alpha = 0.8) +
   geom_smooth(method = "lm", se = TRUE, level = 0.5, color = "#F577e0", linetype = "dashed") +
-  geom_text_repel(size = 2.7, max.overlaps = 10) +
+  geom_text_repel(size = 2.7, max.overlaps = 15) +
   labs(
     title = "Education Spending (% of GDP)\nand Weighted Average Mean Score in PISA\n(High Income Countries, latest year up to 2022)",
     x = "Education Spending (% of GDP) (latest available year up to 2022)",
@@ -2949,9 +3147,9 @@ wealth and educational performance.
 ```{r PISA-data-exploration-economic-prosperity-pisa-score, fig.width=8, fig.height=10,message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# =====================
+ 
 # 1. Prepare the Weighted Average Mean Score for 2022
-# =====================
+ 
 mean_scores_2022 <- student %>%
   filter(!is.na(avg_score), !is.na(stu_wgt), year == 2022) %>%
   group_by(country) %>%
@@ -2960,16 +3158,16 @@ mean_scores_2022 <- student %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 2. Prepare GDP per PPP Data
-# =====================
+ 
 gdp_perppp <- gdp_perppp %>%
   rename(GDP_per_PPP_2022 = GDP_per_PPP_2022) %>%
   mutate(country = toupper(trimws(as.character(country))))
 
-# =====================
+ 
 # 3. Merge the two dataframes
-# =====================
+ 
 plot_data <- mean_scores_2022 %>%
   left_join(gdp_perppp %>% select(country, GDP_per_PPP_2022), by = "country") %>%
   left_join(region_income %>% select(country, country_name), by = "country") %>%
@@ -2978,14 +3176,14 @@ plot_data <- mean_scores_2022 %>%
 # Filter out missing GDP values if needed
 plot_data <- plot_data %>% filter(!is.na(GDP_per_PPP_2022))
 
-# =====================
+ 
 # 4. Plot: Mean Score vs. GDP per PPP (Log scale)
-# =====================
+ 
 
 ggplot(plot_data, aes(x = GDP_per_PPP_2022, y = weighted_avg_score, label = country_name)) +
   geom_point(size = 2.5, color = "#23395d", alpha = 0.85) +
   geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
-  geom_text_repel(size = 2.8, max.overlaps = 12) +
+  geom_text_repel(size = 2.8, max.overlaps = 15) +
   scale_x_log10(labels = scales::comma_format(accuracy = 1)) +  # Log scale, nice formatting
   labs(
     title = "Weighted Average Mean Score (2022) vs GDP per Capita (PPP, 2022)",
@@ -3151,9 +3349,9 @@ educational effectiveness.
 ```{r PISA-data-exploration-student-teacher-ratio, fig.width=8, fig.height=10, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# =====================
+ 
 # 1. Prepare the Weighted Average Mean Score for 2022
-# =====================
+ 
 mean_scores_2022 <- student %>%
   filter(!is.na(avg_score), !is.na(stu_wgt), year == 2022) %>%
   group_by(country) %>%
@@ -3162,9 +3360,9 @@ mean_scores_2022 <- student %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 2. Calculate the Average Student-Teacher Ratio (stratio) per Country in 2022
-# =====================
+ 
 stratio_2022 <- school %>%
   filter(!is.na(stratio), !is.na(country), year == 2022) %>%
   group_by(country) %>%
@@ -3173,9 +3371,9 @@ stratio_2022 <- school %>%
     .groups = "drop"
   )
 
-# =====================
+ 
 # 3. Merge the Two DataFrames
-# =====================
+ 
 plot_data <- mean_scores_2022 %>%
   left_join(stratio_2022, by = "country") %>%
   left_join(region_income %>% select(country, country_name), by = "country") %>%
@@ -3183,14 +3381,14 @@ plot_data <- mean_scores_2022 %>%
 
 plot_data <- plot_data %>% filter(!is.na(avg_stratio))
 
-# =====================
+ 
 # 4. Plot: Weighted Mean Score vs. Student-Teacher Ratio
-# =====================
+ 
 
 ggplot(plot_data, aes(x = avg_stratio, y = weighted_avg_score, label = country_name)) +
   geom_point(size = 2.5, color = "#23395d", alpha = 0.85) +
   geom_smooth(method = "lm", se = TRUE, level = 0.8, color = "#F577e0", linetype = "dashed") +
-  geom_text_repel(size = 2.8, max.overlaps = 12) +
+  geom_text_repel(size = 2.8, max.overlaps = 15) +
   labs(
     title = "Weighted Average Mean Score (2022) vs Student-Teacher Ratio (2022)",
     x = "Student-Teacher Ratio (2022)",
@@ -3289,7 +3487,7 @@ Most Latin American countries show high student-teacher ratios (15-26)
 with correspondingly lower PISA scores, indicating systematic
 under-investment in teaching staff.
 
-\*\*Developing Nation Constraints\* Many lower-income countries face
+**Developing Nation Constraints:** Many lower-income countries face
 severe staffing constraints (ratios above 20), directly correlating with
 educational performance challenges.
 
@@ -3440,7 +3638,7 @@ ggplot(wm_wide, aes(x = country_name)) +
   geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
   geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by School Type \n (Lower-middle income countries)",
+    title = "2022 Weighted Mean Score by School Type \n(Lower-middle income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "School Type"
@@ -3450,7 +3648,7 @@ ggplot(wm_wide, aes(x = country_name)) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(face = "bold")
-  )
+  ,legend.position = "bottom")
 #
 ```
 
@@ -3709,7 +3907,7 @@ ggplot(wm_wide, aes(x = country_name)) +
   geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
   geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by School Type \n (Upper-middle income countries)",
+    title = "2022 Weighted Mean Score by School Type \n(Upper-middle income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "School Type"
@@ -3718,7 +3916,8 @@ ggplot(wm_wide, aes(x = country_name)) +
   theme_minimal(base_size = 13) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 #
 ```
@@ -3894,7 +4093,7 @@ wm_wide <- wm_sector %>%
     names_from = public_private,
     values_from = weighted_mean_score
   ) %>%
-  filter(!is.na(public), !is.na(private)) %>% # Only keep countries with both sectors
+  filter(!is.na(public), !is.na(private)) %>% 
   mutate(
     diff_private_public = private - public
   )
@@ -3910,7 +4109,7 @@ ggplot(wm_wide, aes(x = country_name)) +
   geom_point(aes(y = private, color = "Private"), size = 3, shape = 17) +
   geom_segment(aes(y = public, yend = private, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by School Type \n (High income countries)",
+    title = "2022 Weighted Mean Score by School Type \n(High income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "School Type"
@@ -3918,8 +4117,9 @@ ggplot(wm_wide, aes(x = country_name)) +
   scale_color_manual(values = c("Public" = "#23395d", "Private" = "#F577e0")) +
   theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -4123,7 +4323,7 @@ This finding challenges traditional assumptions about gender performance
 in mathematics and highlights important educational equity
 considerations.
 
-```{r PISA-data-exploration-boys-vs-girls-school-lower-middle-countries, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-lower-middle-countries, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # 1. Standardize gender, filter for valid data (Lower-middle income, valid gender, valid score, 2022)
@@ -4169,7 +4369,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by Gender (Lower-middle income countries)",
+    title = "2022 Weighted Mean Global Score by Gender \n(Lower-middle income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "Gender"
@@ -4178,7 +4378,8 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   theme_minimal(base_size = 13) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -4387,7 +4588,7 @@ minus female score, where negative values indicate male advantage and
 positive values indicate female advantage. Countries classified using
 World Bank income classifications.
 
-```{r PISA-data-exploration-boys-vs-girls-school-lower-middle-countries-math, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-lower-middle-countries-math, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # 1. Standardize gender, filter for valid data (Lower-middle income, valid gender, valid score, 2022)
@@ -4433,7 +4634,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Math Score by Gender \n (Lower middle income countries)",
+    title = "2022 Weighted Mean Math Score by Gender \n(Lower middle income countries)",
     x = "Countries",
     y = "Weighted Mean Math Score",
     color = "Gender"
@@ -4442,7 +4643,8 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   theme_minimal(base_size = 13) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -4571,7 +4773,7 @@ The gender gaps range from a 7.5-point male advantage to a 31.6-point
 female advantage, indicating significant variation in gender equity
 across this income group.
 
-```{r PISA-data-exploration-boys-vs-girls-school-upper-middle-countries, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-upper-middle-countries, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 
@@ -4618,7 +4820,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by Gender (Upper-middle income countries)",
+    title = "2022 Weighted Mean Global Score by Gender \n(Upper-middle income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "Gender"
@@ -4627,7 +4829,8 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   theme_minimal(base_size = 13) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -4905,7 +5108,7 @@ While traditional male advantages persist in Latin American countries,
 several upper-middle income nations demonstrate female advantages,
 particularly in the Balkans, Middle East, and Southeast Asia.
 
-```{r PISA-data-exploration-boys-vs-girls-school-upper-middle-countries-math, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-upper-middle-countries-math, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # 1. Standardize gender, filter for valid data (Upper-middle income, valid gender, valid score, 2022)
@@ -4951,7 +5154,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Math Score by Gender \n (Upper middle income countries)",
+    title = "2022 Weighted Mean Math Score by Gender \n(Upper middle income countries)",
     x = "Countries",
     y = "Weighted Mean Math Score",
     color = "Gender"
@@ -4960,7 +5163,8 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   theme_minimal(base_size = 13) +
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -5096,7 +5300,7 @@ The gender gaps range from a 7.4-point male advantage to a 22.4-point
 female advantage, demonstrating that even in wealthy nations, gender
 equity in education remains a complex challenge.
 
-```{r PISA-data-exploration-boys-vs-girls-school-high-income-countries, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-high-income-countries, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # 1. Standardize gender, filter for valid data (High income, valid gender, valid score, 2022)
@@ -5142,7 +5346,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Score by Gender (High income countries)",
+    title = "2022 Weighted Mean Global Score by Gender \n(High income countries)",
     x = "Countries",
     y = "Weighted Mean Score",
     color = "Gender"
@@ -5150,8 +5354,9 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
   theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -5477,7 +5682,7 @@ Gender gap calculated as male score minus female score, where negative
 values indicate male advantage and positive values indicate female
 advantage.
 
-```{r PISA-data-exploration-boys-vs-girls-school-high-countries-math, message=FALSE, warning=FALSE}
+```{r PISA-data-exploration-boys-vs-girls-school-high-countries-math, fig.width=7, fig.height=5, fig.align='center',message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
 # 1. Standardize gender, filter for valid data (High income, valid gender, valid score, 2022)
@@ -5523,7 +5728,7 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   geom_point(aes(y = female, color = "Female"), size = 3, shape = 17) +
   geom_segment(aes(y = male, yend = female, xend = country_name), linetype = "dashed", color = "grey60") +
   labs(
-    title = "2022 Weighted Mean Math Score by Gender \n (High income countries)",
+    title = "2022 Weighted Mean Math Score by Gender \n(High income countries)",
     x = "Countries",
     y = "Weighted Mean Math Score",
     color = "Gender"
@@ -5531,8 +5736,9 @@ ggplot(wm_gender_wide, aes(x = country_name)) +
   scale_color_manual(values = c("Male" = "#23395d", "Female" = "#F577e0")) +
   theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(face = "bold")
+    axis.text.x = element_text(angle = 90, hjust = 1),
+    plot.title = element_text(face = "bold"),
+    legend.position = "bottom"
   )
 
 ```
@@ -5761,7 +5967,7 @@ ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = countr
   geom_text_repel(
   size = 3,
   box.padding = 0.25,
-  max.overlaps = 50 # augmente ce nombre si besoin
+  max.overlaps = 60 
 )+
   # Adjust axes
   scale_x_continuous(
@@ -5788,7 +5994,8 @@ ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = countr
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(face = "bold"),
-    plot.caption = element_text(size = 10, hjust = 0)
+    plot.caption = element_text(size = 10, hjust = 0),
+    legend.position = "bottom"
   )
 
 ```
@@ -5963,7 +6170,7 @@ ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = countr
   geom_text_repel(
   size = 3,
   box.padding = 0.25,
-  max.overlaps = 50 # augmente ce nombre si besoin
+  max.overlaps = 60 
 )+
   # Adjust axes
   scale_x_continuous(
@@ -5990,7 +6197,8 @@ ggplot(gap_vs_index, aes(x = gender_parity_index, y = gender_gap, label = countr
   theme(
     axis.text.x = element_text(angle = 45, hjust = 1),
     plot.title = element_text(face = "bold"),
-    plot.caption = element_text(size = 10, hjust = 0)
+    plot.caption = element_text(size = 10, hjust = 0),
+    legend.position = "bottom"
   )
 
 
@@ -6054,10 +6262,10 @@ roles in determining gender-specific math achievement patterns.
 ## Introduction to Modeling
 
 Following the exploratory data analysis, the next step is to develop
-predictive models for individual student PISA average scores. PISA
-scores typically range from 200 to 800, as a result, the expected Root
-Mean Squared Error (RMSE) in this context will be much higher and should
-be interpreted relative to the scale of the data.
+predictive models for individual student PISA mean scores. PISA scores
+typically range from 200 to 800, as a result, the expected Root Mean
+Squared Error (RMSE) in this context will be much higher and should be
+interpreted relative to the scale of the data.
 
 For this project, model performance is primarily evaluated in comparison
 to a baseline model that predicts the mean training set score for all
@@ -6069,9 +6277,8 @@ ability to reduce the RMSE relative to this baseline.
 Model accuracy is assessed using the Root Mean Squared Error (RMSE),
 which is a standard evaluation metric for regression tasks.
 
-RMSE quantifies the average magnitude of the prediction errors,
-expressing them in the same units as the target variable. The formula is
-given by:
+RMSE quantifies the mean magnitude of the prediction errors, expressing
+them in the same units as the target variable. The formula is given by:
 
 $$
 \text{RMSE} = \sqrt{ \frac{1}{N} \sum_{i=1} \left( \hat{y}_{i} - y_{i} \right)^2 }
@@ -6117,7 +6324,7 @@ PISA cycle.
 ```{r PISA-dataset-create-initial-database, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
 
-# 1. Filer the years 2018 et 2022
+# 1. Filer the years 2022
 student_sub <- student %>%
   filter(year %in% c(2022))
 
@@ -6150,7 +6357,15 @@ gender_index_secondary <- gender_index %>%
   ungroup() %>%
   select(country, gender_parity_index, year) 
 
-# Ensuite merge comme avant
+# 6. Add education expenditure (% of GDP)
+student_enriched <- student_enriched %>%
+  left_join(
+    edu_exp_latest %>% 
+      select(country, percentage_education_on_gdp),
+    by = "country"
+  )
+
+# Merge
 student_enriched <- student_enriched %>%
   left_join(gender_index_secondary %>% select(country, gender_parity_index), by = "country")
 
@@ -6164,8 +6379,20 @@ glimpse(student_enriched)
 knitr::opts_chunk$set(echo=FALSE)
 
 num_vars <- student_enriched %>%
-  select("avg_score", "escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index") %>%
-  filter(complete.cases(.))
+  mutate(percentage_education_on_gdp = as.numeric(percentage_education_on_gdp)) %>%
+  select(
+    avg_score,
+    escs,
+    staff_shortage,
+    fund_gov,
+    school_size,
+    stratio,
+    GDP_per_PPP_2022,
+    gender_parity_index,
+    percentage_education_on_gdp
+  ) %>%
+  na.omit()
+
 
 cor_matrix <- cor(num_vars)
 # Renamme for better lisibility
@@ -6173,11 +6400,12 @@ colnames(cor_matrix) <- rownames(cor_matrix) <- c(
   "PISA Score",
   "ESCS",
   "Staff Shortage",
-  "Government Funding (%)",
+  "School Gov.Funding (%)",
   "School Size",
   "Student-Teacher Ratio",
   "GDP per capita (PPP)",
-  "Gender Parity Index"
+  "Gender Parity Index",
+  "Education Spending (% of GDP)"
 )
 corrplot(
   cor_matrix,
@@ -6192,67 +6420,80 @@ corrplot(
 )
 ```
 
-**Socioeconomic Status as the Primary Predictor**
+**Individual Socioeconomic Status Dominates**
 
-**ESCS (Economic, Social, Cultural Status)**: Shows the strongest
+***ESCS (Economic, Social, Cultural Status)**:* Shows the strongest
 correlation with PISA scores at **0.46**, confirming it as the most
 powerful predictor of academic achievement. This demonstrates that the
 combination of economic resources, parental education, and cultural
 capital has a substantial impact on student performance.
 
-**School Resource and Structure Variables**
+**National Economic and Investment Context**
 
-**Student-Teacher Ratio**: Shows a notable negative correlation of
-**-0.18** with PISA scores, indicating that lower student-teacher ratios
-(smaller class sizes) are associated with better academic performance.
-This is one of the stronger school-level predictors.
-
-**Staff Shortage**: Displays a negative correlation of **-0.16** with
-performance, showing that schools with more adequate staffing tend to
-have better student outcomes.
-
-**School Size**: Shows a very weak positive correlation of **0.05**,
-suggesting that school size has minimal impact on performance.
-
-**Government Funding Percentage**: Exhibits a weak negative correlation
-of **-0.04**, indicating a slight tendency for higher government funding
-proportions to be associated with lower performance, though this
-relationship is quite minimal.
-
-**National Economic Context**
-
-**GDP per capita (PPP)**: Shows a substantial positive correlation of
+***GDP per capita (PPP)**:* Shows a substantial positive correlation of
 **0.37** with PISA scores, demonstrating that national economic
 prosperity has a meaningful association with educational outcomes,
 though still weaker than individual socioeconomic factors.
 
-**Gender Parity - A Surprising Finding**
+***Education Spending (% of GDP)**:* Displays a positive correlation of
+**0.15** with PISA performance, suggesting that countries investing a
+higher proportion of their GDP in education tend to achieve better
+outcomes. This is a meaningful relationship, though not as strong as
+economic or socioeconomic factors.
 
-**Gender Parity Index**: Shows a negative correlation of **-0.18** with
-PISA scores. This is counterintuitive and suggests that countries with
-higher gender parity in enrollment tend to have slightly lower overall
-PISA scores. This might reflect that countries still working toward
-gender parity may be dealing with other systemic educational challenges,
-or it could indicate trade-offs in educational resource allocation.
+**School-Level Resource Factors**
 
-**Key Insights**
+***Student-Teacher Ratio**:* Shows a notable negative correlation of
+**-0.18** with PISA scores, indicating that lower student-teacher ratios
+(smaller class sizes) are associated with better academic performance.
+This is one of the stronger school-level predictors and one of the most
+actionable findings for education policy.
 
-The hierarchy of influence on PISA scores appears to be:
+***Staff Shortage**:* Exhibits a negative correlation of **-0.16** with
+performance, confirming that adequate staffing levels matter for student
+outcomes.
 
-1.  **ESCS (0.46)** : Individual socioeconomic status
+***School Size**:* Shows a very weak positive correlation of **0.04**,
+suggesting that school size has minimal impact on performance.
 
-2.  **GDP per capita (0.37)** : National economic conditions
+***School Government Funding (%)**:* Exhibits a weak negative
+correlation of **-0.04**, indicating a slight tendency for higher
+government funding proportions to be associated with lower performance,
+though this relationship is quite minimal. This can be translated as the
+difference in performance between public and private school are minimal,
+thus with a slight positive effect for private schools on academic
+performance.
 
-3.  **Student-Teacher Ratio (-0.18)** : Class size effects
+**The Gender Parity Paradox**
 
-4.  **Gender Parity Index (-0.18)** : Enrollment equity (negative
-    association)
+***Gender Parity Index**:* Shows a negative correlation of **-0.18**
+with PISA scores. This counterintuitive finding suggests that countries
+with higher gender enrollment parity tend to have slightly lower overall
+performance. This might reflect that nations still working toward gender
+equity face broader systemic educational challenges.
 
-5.  **Staff Shortage (-0.16)** : Staffing adequacy
+**Key Policy Insights**
 
-The analysis confirms that while individual socioeconomic background
-remains the strongest predictor, school-level factors like class size
-and staffing do matter meaningfully for educational outcomes.
+The hierarchy of correlations suggests:
+
+1.  **Individual socioeconomic support** (ESCS: 0.46) remains most
+    critical
+
+2.  **National economic development** (GDP: 0.37) provides the
+    foundation
+
+3.  **Class size reduction** (Student-Teacher Ratio: -0.18) offers the
+    strongest school-level intervention
+
+4.  **Education investment** (% of GDP: 0.15) shows meaningful returns
+
+5.  **Adequate staffing** (Staff Shortage: -0.16) supports quality
+    delivery
+
+Notably, **the positive correlation between education spending and both
+PISA scores (0.15) and ESCS (0.22)** suggests that educational
+investment may help address socioeconomic disparities while improving
+overall outcomes.
 
 ```{r PISA-dataset-train-split-test, message=FALSE, warning=FALSE}
 knitr::opts_chunk$set(echo=FALSE)
@@ -6306,8 +6547,8 @@ assessing the performance of more advanced predictive models.
 
 Given that PISA scores typically range from 200 to 800, a much higher
 RMSE is expected compared to rating prediction tasks on scales from 1 to
-5 (such as MovieLens). In this context, model performance is best
-interpreted relative to the baseline RMSE, rather than any absolute
+5 (such as MovieLens PROJECT). In this context, model performance is
+best interpreted relative to the baseline RMSE, rather than any absolute
 threshold.
 
 ```{r PISA-dataset-naive-base, message=FALSE, warning=FALSE}
@@ -6327,7 +6568,7 @@ models are trained and evaluated.
 **Baseline (Mean Prediction)**
 
 As a first step, a simple baseline model was established by predicting
-the average score of the training set for all students in the test set.
+the mean score of the training set for all students in the test set.
 This naïve approach serves as a reference point, enabling a meaningful
 comparison with more sophisticated models. It is particularly useful to
 understand the minimum level of accuracy that any predictive model
@@ -6379,7 +6620,7 @@ valid_cols <- sapply(student_train, function(x)
 student_train <- student_train[, valid_cols]
 student_test  <- student_test[, valid_cols]
 
-vars_to_use <- c("avg_score", "escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index")
+vars_to_use <- c("avg_score", "escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index","percentage_education_on_gdp")
 student_train2 <- student_train %>%
   select(any_of(vars_to_use)) %>%
   filter(complete.cases(.)) # enlève les lignes avec NA
@@ -6405,7 +6646,7 @@ cat("Ranger RMSE:", rmse_ranger, "\n")
 # Assume "avg_score" is the target, all other columns are predictor variables
 # Use only numeric columns without NA
 
-predictors <- c("escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index")
+predictors <- c("escs", "staff_shortage", "fund_gov", "school_size", "stratio" , "GDP_per_PPP_2022", "gender_parity_index","percentage_education_on_gdp")
 student_train2 <- student_train %>%
   select(all_of(c("avg_score", predictors))) %>%
   filter(complete.cases(.))
@@ -6449,13 +6690,13 @@ students, has the highest RMSE. Linear regression significantly improves
 upon this, indicating that the selected predictors offer meaningful
 explanatory power.
 
-The ranger implementation of random forest achieves the lowest RMSE
-(68.63), outperforming both linear regression and XGBoost. This
-demonstrates the strength of tree-based ensemble models in capturing
-nonlinearities and complex interactions present in the data. XGBoost,
-while slightly less accurate in this context (RMSE 71.15), still
-provides substantial gains over the baseline and linear regression
-models, confirming its effectiveness for structured data.
+The ranger implementation of random forest achieves the lowest RMSE ,
+outperforming both linear regression and XGBoost. This demonstrates the
+strength of tree-based ensemble models in capturing nonlinearities and
+complex interactions present in the data. XGBoost, while slightly less
+accurate in this context, still provides substantial gains over the
+baseline and linear regression models, confirming its effectiveness for
+structured data.
 
 Overall, ensemble methods; particularly ranger, demonstrate superior
 predictive accuracy for modeling student performance in the PISA
@@ -6510,9 +6751,9 @@ yielded the highest RMSE. Linear regression reduced the error
 considerably, while both ranger and XGBoost further improved predictive
 performance.
 
-**The ranger implementation of random forest achieved the lowest RMSE
-(68.63)**, indicating the best generalization on unseen data among the
-models tested.
+**The ranger implementation of random forest achieved the lowest RMSE**
+, indicating the best generalization on unseen data among the models
+tested.
 
 These results highlight the importance of using ensemble tree-based
 methods for educational score prediction, as they effectively capture
@@ -6523,26 +6764,91 @@ Model selection was guided by both predictive performance (RMSE) and
 practical considerations such as computational efficiency.
 
 In this project, multiple predictive models were developed and evaluated
-to estimate individual student PISA average scores using a
-comprehensive, multi-source dataset. The modeling approach began with a
-simple baseline (mean prediction) and advanced to linear regression,
-ensemble tree-based methods (ranger/random forest), and gradient
-boosting (XGBoost).
+to estimate individual student PISA mean scores using a comprehensive,
+multi-source dataset. The modeling approach began with a simple baseline
+(mean prediction) and advanced to linear regression, ensemble tree-based
+methods (ranger/random forest), and gradient boosting (XGBoost).
 
 Each modeling step led to improvements in predictive accuracy, as
 reflected by progressive reductions in the Root Mean Squared Error
 (RMSE). Among all tested approaches, the ranger implementation of random
 forest achieved the best predictive performance on the holdout test set
-(RMSE = 68.63), outperforming both linear regression and XGBoost. These
-results underscore the value of ensemble learning methods for
-educational data, particularly in capturing non-linear relationships and
-complex interactions among predictors.
+, outperforming both linear regression and XGBoost. These results
+underscore the value of ensemble learning methods for educational data,
+particularly in capturing non-linear relationships and complex
+interactions among predictors.
 
 # Conclusion
 
-Unlike previous projects with strict target RMSE thresholds, model
-success in this context was measured relative to a baseline appropriate
-to the wider range of PISA scores.
+The analysis highlights the complex and multi-layered determinants of
+student performance in the PISA assessment. By integrating
+student-level, school-level, and national-level contextual variables,
+and applying predictive modeling techniques, it becomes evident that
+educational achievement is influenced by both individual circumstances
+and structural conditions.
+
+The correlation analysis confirms the dominant role of individual
+socioeconomic background in shaping educational outcomes. **ESCS**
+(Economic, Social, and Cultural Status) remains the strongest predictor
+of PISA scores, emphasizing the enduring impact of family resources,
+parental education, and cultural capital on academic performance.
+
+Beyond the individual level, **national economic prosperity**, measured
+by **GDP per capita (PPP)**, also shows a substantial association with
+learning outcomes, underscoring the broader structural conditions that
+support or constrain educational success.
+
+Importantly, the analysis highlights the positive contribution of
+**education investment**, as reflected in the share of **GDP allocated
+to education spending**. Though not as strongly correlated as individual
+or economic variables, this factor shows a meaningful association with
+PISA scores, suggesting that sustained investment in education can yield
+measurable improvements in performance and may contribute to reducing
+socioeconomic disparities.
+
+Among school-level factors, **student-teacher ratio** and **staff
+shortage** stand out as the most influential. Smaller class sizes and
+adequate staffing levels are both associated with better student
+achievement, confirming their relevance for education policy. By
+contrast, variables such as **school size** and **government funding as
+a percentage of school budget** exhibit minimal or weak associations,
+suggesting limited impact on learning outcomes in isolation.
+
+A counterintuitive yet consistent pattern emerges with the **gender
+parity index**, which shows a weak negative correlation with
+performance. This may reflect the complex trade-offs faced by education
+systems that are expanding access while still grappling with quality and
+systemic inequities.
+
+Taken together, the findings support a **multidimensional strategy for
+improving educational outcomes**:
+
+-   **Targeted support for socioeconomically disadvantaged students**
+    remains the most impactful intervention.
+
+-   **Macroeconomic development and sustained public investment** in
+    education offer foundational support.
+
+-   **School-level reforms**, especially in staffing and class sizes,
+    can deliver tangible benefits.
+
+-   **Equity goals**, such as gender parity, must be pursued in parallel
+    with quality-focused policies to avoid unintended trade-offs.
+
+Overall, the findings support a **multidimensional policy approach**
+that addresses disparities at the household level, ensures equitable
+distribution of school resources, and balances the dual goals of access
+and quality. Such an approach enables both more accurate prediction of
+educational outcomes and more effective strategies for improving student
+achievement, particularly among disadvantaged populations.
+
+This **multilevel approach enables more accurate predictive modeling**
+and, most importantly, supports targeted and impactful education policy
+design aimed at lifting the performance of all students , especially
+those from disadvantaged backgrounds. Unlike previous projects with
+strict target RMSE thresholds, model success in this context was
+measured relative to a baseline appropriate to the wider range of PISA
+scores.
 
 The substantial RMSE improvement over the baseline demonstrates the
 added value of including socio-economic, school-level, and country-level
@@ -6555,65 +6861,121 @@ years.
 
 **Future Directions:** Further improvements could involve the
 integration of data from multiple years, advanced imputation methods for
-missing values.
+missing values, and enlarging the study to the mental well being of the
+students.
 
-# Comments on the project and references
+# Comments on the research project and references
 
-I found this project so fascinating that I am now eager to delve deeper into the intersection of children’s mental health and education. I have already begun exploring and cross-referencing data from PISA on these topics, as well as drawing on resources from the World Health Organization (WHO) and the Institute for Health Metrics and Evaluation (IHME). This multidimensional approach will allow for a more comprehensive understanding of how educational factors relate to mental health outcomes among children.
+I found this project so fascinating that I am now eager to delve deeper
+into the intersection of children’s mental health and education. I have
+already begun exploring and cross-referencing data from PISA on these
+topics, as well as drawing on resources from the World Health
+Organization (WHO) and the Institute for Health Metrics and Evaluation
+(IHME). This multidimensional approach will allow for a more
+comprehensive understanding of how educational factors relate to mental
+health outcomes among children.
 
-I would like to acknowledge Rafael Irizarry’s book, which served as a valuable reference throughout this project. Thanks to his Data Science courses that I completed on Harvard EdX, my skills and understanding of the subject have improved tremendously.
+I would like to express my sincere gratitude to **Professor Rafael
+Irizarry** for his outstanding teaching and inspiring courses in **Data
+Science at Harvard**. His passion for the subject and dedication to
+sharing knowledge have been instrumental in shaping my understanding and
+appreciation of the field. I would like to acknowledge also his books,
+which served as a valuable references throughout this project. Thanks to
+his Data Science program, my skills and understanding of the subject
+have improved tremendously.
 
-Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
-Prediction Algorithms with R (Part I)*. Self-published.
+Irizarry, R. A. (2022). ***Introduction to Data Science: Data Analysis
+and Prediction Algorithms with R (Part I)***. Self-published.
 <https://rafalab.dfci.harvard.edu/dsbook-part-1/>
 
-Irizarry, R. A. (2022). *Introduction to Data Science: Data Analysis and
-Prediction Algorithms with R (Part II)*. Self-published.
+Irizarry, R. A. (2022). ***Introduction to Data Science: Data Analysis
+and Prediction Algorithms with R (Part II**)*. Self-published.
 <https://rafalab.dfci.harvard.edu/dsbook-part-2/>
 
-I would like also to particularly thank the authors of the learningtower dataset:
+I would like also to particularly thank the authors of the learningtower
+dataset:
 
-  Wang K, Yacobellis P, Siregar E, Romanes S, Fitter K,
-  Dalla Riva G, Cook D, Tierney N, Dingorkar P, Sai
-  Subramanian S, Chen G (2024). _learningtower: OECD
-  PISA Datasets from 2000-2022 in an Easy-to-Use
-  Format_. R package version 1.1.0,
-  https://github.com/kevinwang09/learningtower,
-  <https://kevinwang09.github.io/learningtower/>.
+Wang K, Yacobellis P, Siregar E, Romanes S, Fitter K, Dalla Riva G, Cook
+D, Tierney N, Dingorkar P, Sai Subramanian S, Chen G (2024).
+*learningtower: OECD PISA Datasets from 2000-2022 in an Easy-to-Use
+Format*. R package version 1.1.0,
+<https://github.com/kevinwang09/learningtower>,
+<https://kevinwang09.github.io/learningtower/>.
 
-Throughout this project, I have aimed to provide clear visualizations that facilitate understanding of the data and help identify issues and biases when they arise. I also made an effort to offer step-by-step explanations in R to clarify my approach.
+Throughout this project, I have aimed to provide clear visualizations
+that facilitate understanding of the data and help identify issues and
+biases when they arise. I also made an effort to offer step-by-step
+explanations in R to clarify my approach.
 
-Additionally, I would like to mention that I used ChatGPT to assist with some of the graphs. Even with this support, it took me several hours to achieve the results I wanted,both bug-free and with clear readability. This was especially true for the visualizations in the sections:
+Additionally, I would like to mention that I used ChatGPT to assist with
+some of the graphs and to check the spelling and the syntaxe of my
+report. Even with this support, it took me a considerable time to
+achieve the results for the graph that I wanted, both bug-free and with
+clear readability. This was especially true for the visualizations in
+the sections:
 
-2.2.4 PISA Performance in Lower-Income Countries: The Socioeconomic Achievement Gap Across Time
+2.2.4 PISA Performance in Lower-Income Countries: The Socioeconomic
+Achievement Gap Across Time
 
-2.2.7 Educational investment and educational outcomes for Lower-middle Income
+2.2.7 Educational investment and educational outcomes for Lower-middle
+Income
 
 2.2.21 UNICEF Gender Parity Index vs PISA Gender Gap Analysis
-
 
 Other references that I found useful and helped me to complete this
 project:
 
-1. **World Bank Open Data**
-
-The World Bank Open Data platform provides free and comprehensive access to global development data, covering economic, social, demographic, and environmental indicators for virtually every country worldwide. It includes statistics on GDP, poverty, education, health, and more, enabling users to analyze trends, compare countries, and inform policy decisions. The database is widely used by researchers, policymakers, and organizations for cross-national and time-series analysis in fields such as education and socioeconomic development.
-
-2. **UNICEF European Union**
-The UNICEF European Union website showcases UNICEF’s work in partnership with the EU to advance children’s rights and wellbeing in Europe and globally. The site features reports, policy briefs, and data on key topics such as child protection, education, health, and gender equality. It also highlights UNICEF’s contributions to evidence-based policymaking, including data and indicators relevant to school enrollment, gender parity, and educational equity—often used in comparative studies and international assessments.
-
-3. **OECD**
-The Organisation for Economic Co-operation and Development (OECD) is a leading international organization that provides data, analysis, and policy advice to promote economic and social well-being. Its Education Directorate is responsible for initiatives like PISA (Programme for International Student Assessment), producing influential reports on educational outcomes, equity, and system performance. The OECD’s website hosts a wealth of resources, including statistics, country reports, and best practice policy recommendations relevant to education, labor markets, and public policy.
-
-4. **ILO Country Groupings – Concepts and Definitions**
-The International Labour Organization (ILO) provides official definitions, classifications, and groupings of countries and regions for use in labor statistics and international reporting. This resource explains how countries are grouped by income, region, or development status according to standardized methodologies. Such classifications ensure data comparability in international labor and social statistics, and are often referenced when segmenting countries in global education and labor market studies.
-
-5. “**Equity and Quality in Education: Supporting Disadvantaged Students and Schools**”
-By: OECD (2012)
-A report focused on reducing inequalities, directly using PISA data and recommendations.
-
-6.“**The Global Testing Culture: Shaping Education Policy, Perceptions, and Practice**”
-Edited by: William C. Smith & Alexander W. Wiseman (2016)
-Explores the effects of global assessments (including PISA) on cultures of testing and learning worldwide.
-
-
+1.  **World Bank Open Data:** The World Bank Open Data platform provides
+    free and comprehensive access to global development data, covering
+    economic, social, demographic, and environmental indicators for
+    virtually every country worldwide. It includes statistics on GDP,
+    poverty, education, health, and more, enabling users to analyze
+    trends, compare countries, and inform policy decisions. The database
+    is widely used by researchers, policymakers, and organizations for
+    cross-national and time-series analysis in fields such as education
+    and socioeconomic development.
+2.  **UNICEF European Union:** The UNICEF European Union website
+    showcases UNICEF’s work in partnership with the EU to advance
+    children’s rights and wellbeing in Europe and globally. The site
+    features reports, policy briefs, and data on key topics such as
+    child protection, education, health, and gender equality. It also
+    highlights UNICEF’s contributions to evidence-based policymaking,
+    including data and indicators relevant to school enrollment, gender
+    parity, and educational equity—often used in comparative studies and
+    international assessments.
+3.  **OECD:** The Organisation for Economic Co-operation and Development
+    (OECD) is a leading international organization that provides data,
+    analysis, and policy advice to promote economic and social
+    well-being. Its Education Directorate is responsible for initiatives
+    like PISA (Programme for International Student Assessment),
+    producing influential reports on educational outcomes, equity, and
+    system performance. The OECD’s website hosts a wealth of resources,
+    including statistics, country reports, and best practice policy
+    recommendations relevant to education, labor markets, and public
+    policy.
+4.  **ILO Country Groupings, Concepts and Definitions:** The
+    International Labour Organization (ILO) provides official
+    definitions, classifications, and groupings of countries and regions
+    for use in labor statistics and international reporting. This
+    resource explains how countries are grouped by income, region, or
+    development status according to standardized methodologies. Such
+    classifications ensure data comparability in international labor and
+    social statistics, and are often referenced when segmenting
+    countries in global education and labor market studies.
+5.  “**Equity and Quality in Education: Supporting Disadvantaged
+    Students and Schools**”: By: OECD (2012) A report focused on
+    reducing inequalities, directly using PISA data and recommendations.
+6.  “**The Global Testing Culture: Shaping Education Policy,
+    Perceptions, and Practice**”: Edited by: William C. Smith &
+    Alexander W. Wiseman (2016) Explores the effects of global
+    assessments (including PISA) on cultures of testing and learning
+    worldwide.
+7.  “**Assessing Educational Equity: National and International
+    Perspectives**”: Edited by: Estelle Herbault
+8.  “**Equity of the European Educational Systems. A Set of
+    Indicators**”: GERESE by European Educational Research Journal
+9.  “**Why Data Collection Matters**” from the book "In Pursuit of
+    Equity in Education": Gary Orfield, Harvard University published by
+    Springer Dordrecht
+10. “**A Theory of Justice** ”: Edited by: John Rawls, editied by Oxford
+    University Press, 1971
